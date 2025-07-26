@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
@@ -24,8 +28,11 @@ export class AuthService {
       password: hash,
     });
 
-    const tokens = await this.getTokens(user.id, user.email);
-    await this.usersService.updateRefreshToken(user.id, await bcrypt.hash(tokens.refreshToken, 10));
+    const tokens = await this.getTokens(user.id, user.email, user.role);
+    await this.usersService.updateRefreshToken(
+      user.id,
+      await bcrypt.hash(tokens.refreshToken, 10),
+    );
     return tokens;
   }
 
@@ -34,8 +41,11 @@ export class AuthService {
     if (!user || !(await bcrypt.compare(dto.password, user.password)))
       throw new UnauthorizedException('Invalid credentials');
 
-    const tokens = await this.getTokens(user.id, user.email);
-    await this.usersService.updateRefreshToken(user.id, await bcrypt.hash(tokens.refreshToken, 10));
+    const tokens = await this.getTokens(user.id, user.email, user.role);
+    await this.usersService.updateRefreshToken(
+      user.id,
+      await bcrypt.hash(tokens.refreshToken, 10),
+    );
     return tokens;
   }
 
@@ -52,13 +62,16 @@ export class AuthService {
     const match = await bcrypt.compare(refreshToken, user.refreshToken);
     if (!match) throw new ForbiddenException('Invalid refresh token');
 
-    const tokens = await this.getTokens(user.id, user.email);
-    await this.usersService.updateRefreshToken(user.id, await bcrypt.hash(tokens.refreshToken, 10));
+    const tokens = await this.getTokens(user.id, user.email, user.role);
+    await this.usersService.updateRefreshToken(
+      user.id,
+      await bcrypt.hash(tokens.refreshToken, 10),
+    );
     return tokens;
   }
 
-  private getTokens(userId: string, email: string) {
-    const payload = { sub: userId, email };
+  private getTokens(userId: string, email: string, role: string) {
+    const payload = { userId, email, role };
     return Promise.all([
       this.jwt.signAsync(payload, {
         secret: this.config.get<string>('JWT_SECRET'),

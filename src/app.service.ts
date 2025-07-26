@@ -5,4 +5,8 @@ export class AppService {
   getHello(): string {
     return 'Hello World!';
   }
+
+  getDashboard(): string {
+    return 'Hello World! I am Dashboard';
+  }
 }
