@@ -1,26 +1,73 @@
-import { Injectable } from '@nestjs/common';
-import { CreateAuthDto } from './dto/create-auth.dto';
-import { UpdateAuthDto } from './dto/update-auth.dto';
+import { Injectable, UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import { UsersService } from '../users/users.service';
+import * as bcrypt from 'bcrypt';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { SignupAuthDto } from './dto/signup-auth.dto';
+import { LoginAuthDto } from './dto/login-auth.dto';
 
 @Injectable()
 export class AuthService {
-  create(createAuthDto: CreateAuthDto) {
-    return 'This action adds a new auth';
+  constructor(
+    private usersService: UsersService,
+    private jwt: JwtService,
+    private config: ConfigService,
+  ) {}
+
+  async signup(dto: SignupAuthDto) {
+    const existing = await this.usersService.findByEmail(dto.email);
+    if (existing) throw new ForbiddenException('Email already exists');
+
+    const hash = await bcrypt.hash(dto.password, 10);
+    const user = await this.usersService.createUser({
+      ...dto,
+      password: hash,
+    });
+
+    const tokens = await this.getTokens(user.id, user.email);
+    await this.usersService.updateRefreshToken(user.id, await bcrypt.hash(tokens.refreshToken, 10));
+    return tokens;
   }
 
-  findAll() {
-    return `This action returns all auth`;
+  async login(dto: LoginAuthDto) {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (!user || !(await bcrypt.compare(dto.password, user.password)))
+      throw new UnauthorizedException('Invalid credentials');
+
+    const tokens = await this.getTokens(user.id, user.email);
+    await this.usersService.updateRefreshToken(user.id, await bcrypt.hash(tokens.refreshToken, 10));
+    return tokens;
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} auth`;
+  async logout(userId: string) {
+    await this.usersService.updateRefreshToken(userId, null);
+    return { message: 'Logged out successfully' };
   }
 
-  update(id: number, updateAuthDto: UpdateAuthDto) {
-    return `This action updates a #${id} auth`;
+  async refreshTokens(userId: string, refreshToken: string) {
+    const user = await this.usersService.findById(userId);
+    if (!user || !user.refreshToken)
+      throw new ForbiddenException('Access Denied');
+
+    const match = await bcrypt.compare(refreshToken, user.refreshToken);
+    if (!match) throw new ForbiddenException('Invalid refresh token');
+
+    const tokens = await this.getTokens(user.id, user.email);
+    await this.usersService.updateRefreshToken(user.id, await bcrypt.hash(tokens.refreshToken, 10));
+    return tokens;
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} auth`;
+  private getTokens(userId: string, email: string) {
+    const payload = { sub: userId, email };
+    return Promise.all([
+      this.jwt.signAsync(payload, {
+        secret: this.config.get<string>('JWT_SECRET'),
+        expiresIn: '15m',
+      }),
+      this.jwt.signAsync(payload, {
+        secret: this.config.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: '7d',
+      }),
+    ]).then(([accessToken, refreshToken]) => ({ accessToken, refreshToken }));
   }
 }
