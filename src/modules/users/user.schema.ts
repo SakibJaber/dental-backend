@@ -39,7 +39,13 @@ export class User {
   isVerified: boolean;
 
   @Prop({ type: String, default: null })
-  refreshToken?: string;
+  refreshToken?: string | null;
+
+  @Prop({ type: String, default: null })
+  resetPasswordCodeHash?: string | null;
+
+  @Prop({ type: Date, default: null })
+  resetPasswordExpires?: Date | null;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

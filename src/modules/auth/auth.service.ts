@@ -2,6 +2,8 @@ import {
   Injectable,
   UnauthorizedException,
   ForbiddenException,
+  BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
@@ -9,14 +11,23 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { SignupAuthDto } from './dto/signup-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
+import { MailService } from 'src/modules/mail/mail.service';
+import { ForgotPasswordDto } from 'src/modules/auth/dto/forgot-password.dto';
+import { ResetPasswordDto } from 'src/modules/auth/dto/reset-password.dto';
+import { VerifyOtpDto } from 'src/modules/auth/dto/verify-otp.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly otpExpiryMs: number;
   constructor(
     private usersService: UsersService,
+    private mailService: MailService,
     private jwt: JwtService,
     private config: ConfigService,
-  ) {}
+  ) {
+    this.otpExpiryMs =
+      (+this.config.get<number>('OTP_EXPIRATION_MINUTES')! || 15) * 60 * 1000;
+  }
 
   async signup(dto: SignupAuthDto) {
     const existing = await this.usersService.findByEmail(dto.email);
@@ -70,9 +81,9 @@ export class AuthService {
     return tokens;
   }
 
-  private getTokens(userId: string, email: string, role: string) {
+  private async getTokens(userId: string, email: string, role: string) {
     const payload = { userId, email, role };
-    return Promise.all([
+    const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(payload, {
         secret: this.config.get<string>('JWT_SECRET'),
         expiresIn: '15m',
@@ -81,6 +92,75 @@ export class AuthService {
         secret: this.config.get<string>('JWT_REFRESH_SECRET'),
         expiresIn: '7d',
       }),
-    ]).then(([accessToken, refreshToken]) => ({ accessToken, refreshToken }));
+    ]);
+    return { accessToken, refreshToken };
+  }
+
+  
+  // Generate & email OTP
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (!user) throw new BadRequestException('No account with that email');
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const hash = await bcrypt.hash(code, 10);
+    user.resetPasswordCodeHash = hash;
+    user.resetPasswordExpires = new Date(Date.now() + this.otpExpiryMs);
+    await user.save();
+
+    await this.mailService.sendResetPasswordOtp(dto.email, code);
+    return { message: 'OTP sent to your email' };
+  }
+
+  // Verify OTP & issue resetToken
+  async verifyOtp(dto: VerifyOtpDto) {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (
+      !user ||
+      !user.resetPasswordCodeHash ||
+      !user.resetPasswordExpires ||
+      user.resetPasswordExpires < new Date()
+    ) {
+      throw new BadRequestException('OTP expired or invalid');
+    }
+
+    const match = await bcrypt.compare(dto.code.toString(), user.resetPasswordCodeHash);
+    if (!match) throw new BadRequestException('Invalid OTP');
+
+    // Issue a JWT scoped for password reset
+    const payload = { sub: user.id, email: user.email };
+    const resetToken = await this.jwt.signAsync(payload, {
+      secret: this.config.get<string>('JWT_RESET_SECRET'),
+      expiresIn: '15m',
+    });
+
+    // clear OTP fields now or after reset
+    user.resetPasswordCodeHash = null;
+    user.resetPasswordExpires = null;
+    await user.save();
+
+    return { resetToken };
+  }
+
+  // Reset password using resetToken
+  async resetPassword(dto: ResetPasswordDto) {
+    let payload: any;
+    try {
+      payload = await this.jwt.verifyAsync(dto.resetToken, {
+        secret: this.config.get<string>('JWT_RESET_SECRET'),
+      });
+    } catch (err) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    const user = await this.usersService.findById(payload.sub);
+    if (!user) throw new BadRequestException('User no longer exists');
+
+    // Update password & revoke refresh tokens
+    user.password = await bcrypt.hash(dto.newPassword, 10);
+    user.refreshToken = null;
+    await user.save();
+
+    return { message: 'Password reset successful' };
   }
 }
