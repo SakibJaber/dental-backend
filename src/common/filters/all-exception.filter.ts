@@ -8,8 +8,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { FileUploadService } from 'src/modules/file-upload/file-upload.service';
-
+import { FileUploadService } from '../../modules/file-upload/file-upload.service';
+import { MongoServerError } from 'mongodb';
 
 @Injectable()
 @Catch()
@@ -50,20 +50,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
     const uploadedFiles = this.getUploadedFiles(request);
 
-    // Handle MongoDB duplicate key error
-    const isMongoDuplicate = 
+    // Handle MongoDB duplicate key error silently
+    if (
+      exception instanceof MongoServerError ||
       exception?.code === 11000 ||
-      exception?.name === 'MongoServerError' ||
-      (exception?.message && exception.message.includes('E11000'));
-
-    if (isMongoDuplicate) {
+      (exception?.message && exception.message.includes('E11000'))
+    ) {
       // Extract duplicate key information
       const keyValue = exception.keyValue || {};
       const key = Object.keys(keyValue)[0] || 'field';
       const value = keyValue[key] || 'value';
       
       // Cleanup uploaded files before responding
-      this.cleanupFiles(uploadedFiles).then(() => {
+      return this.cleanupFiles(uploadedFiles).then(() => {
         response.status(HttpStatus.CONFLICT).json({
           statusCode: HttpStatus.CONFLICT,
           message: `${key} '${value}' already exists.`,
@@ -71,7 +70,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
           path: request.url,
         });
       });
-      return;
     }
 
     // Handle HttpException
@@ -85,7 +83,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
             ? (res as any).message
             : exception.message;
 
-      this.cleanupFiles(uploadedFiles).then(() => {
+      return this.cleanupFiles(uploadedFiles).then(() => {
         response.status(status).json({
           statusCode: status,
           message,
@@ -93,7 +91,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
           path: request.url,
         });
       });
-      return;
     }
 
     // Log other errors
@@ -103,7 +100,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     );
 
     // Handle other errors
-    this.cleanupFiles(uploadedFiles).then(() => {
+    return this.cleanupFiles(uploadedFiles).then(() => {
       response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         message: 'Internal server error',

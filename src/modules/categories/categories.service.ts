@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   InternalServerErrorException,
+  BadRequestException,
+  HttpStatus,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -23,7 +25,10 @@ export class CategoryService {
   ): Promise<Category> {
     try {
       if (!file) {
-        throw new Error('No file uploaded');
+        throw new BadRequestException({
+          statusCode: HttpStatus.BAD_REQUEST,
+          message: 'No file uploaded',
+        });
       }
 
       const imageUrl = await this.fileUploadService.handleUpload(file);
@@ -35,8 +40,10 @@ export class CategoryService {
 
       return await category.save();
     } catch (error) {
-      console.error('Create category error:', error);
-      throw new InternalServerErrorException(error.message);
+      throw new InternalServerErrorException({
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error.message || 'Category creation failed',
+      });
     }
   }
 
@@ -47,7 +54,10 @@ export class CategoryService {
   async findOne(id: string): Promise<Category> {
     const category = await this.categoryModel.findById(id).exec();
     if (!category) {
-      throw new NotFoundException(`Category with ID ${id} not found`);
+      throw new NotFoundException({
+        statusCode: HttpStatus.NOT_FOUND,
+        message: `Category with ID ${id} not found`,
+      });
     }
     return category;
   }
@@ -68,14 +78,21 @@ export class CategoryService {
     }
 
     const updatedCategory = await this.categoryModel
-      .findByIdAndUpdate(id, {
-        name: updateCategoryDto.name || existingCategory.name,
-        imageUrl: newImageUrl,
-      }, { new: true })
+      .findByIdAndUpdate(
+        id,
+        {
+          name: updateCategoryDto.name || existingCategory.name,
+          imageUrl: newImageUrl,
+        },
+        { new: true },
+      )
       .exec();
 
     if (!updatedCategory) {
-      throw new NotFoundException(`Category with ID ${id} not found`);
+      throw new NotFoundException({
+        statusCode: HttpStatus.NOT_FOUND,
+        message: `Category with ID ${id} not found`,
+      });
     }
 
     return updatedCategory;
