@@ -53,22 +53,38 @@ export class FileUploadService {
     }
   }
 
-  async deleteFile(fileUrl: string) {
-    if (!fileUrl) return;
+  async deleteFile(fileIdentifier: string) {
+    if (!fileIdentifier) return;
 
-    if (this.useS3) {
-      const url = new URL(fileUrl);
-      const key = decodeURIComponent(url.pathname.slice(1));
-      await this.s3.send(
-        new DeleteObjectCommand({
-          Bucket: this.configService.get<string>('AWS_S3_BUCKET')!,
-          Key: key,
-        }),
-      );
-    } else {
-      const fileName = path.basename(fileUrl);
-      const filePath = path.join(this.localUploadPath, fileName);
-      await fs.unlink(filePath).catch(console.error);
+    try {
+      if (this.useS3) {
+        // Handle both full URLs and S3 keys
+        let key = fileIdentifier;
+        if (fileIdentifier.startsWith('https://')) {
+          const url = new URL(fileIdentifier);
+          key = decodeURIComponent(url.pathname.slice(1));
+        }
+
+        await this.s3.send(
+          new DeleteObjectCommand({
+            Bucket: this.configService.get<string>('AWS_S3_BUCKET')!,
+            Key: key,
+          }),
+        );
+      } else {
+        // Handle both file paths and public URLs
+        let filePath = fileIdentifier;
+        if (fileIdentifier.startsWith('/uploads/')) {
+          filePath = path.join(
+            this.localUploadPath,
+            path.basename(fileIdentifier),
+          );
+        }
+        await fs.unlink(filePath);
+      }
+    } catch (error) {
+      console.error(`File deletion error: ${error.message}`);
+      throw new InternalServerErrorException('File deletion failed');
     }
   }
 }
