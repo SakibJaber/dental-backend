@@ -20,7 +20,7 @@ export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
   @Post()
-  @UseGlobalFileInterceptor()
+  @UseGlobalFileInterceptor({ fieldName: 'image' })
   async create(
     @Body() createCategoryDto: CreateCategoryDto,
     @UploadedFile() file: Express.Multer.File,
@@ -39,7 +39,7 @@ export class CategoryController {
   }
 
   @Put(':id')
-  @UseGlobalFileInterceptor()
+  @UseGlobalFileInterceptor({ fieldName: 'image' })
   async update(
     @Param('id') id: string,
     @Body() updateCategoryDto: UpdateCategoryDto,
@@ -49,7 +49,9 @@ export class CategoryController {
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: string): Promise<{ statusCode: number; message: string }> {
+  async remove(
+    @Param('id') id: string,
+  ): Promise<{ statusCode: number; message: string }> {
     await this.categoryService.remove(id);
     return {
       statusCode: HttpStatus.OK,
