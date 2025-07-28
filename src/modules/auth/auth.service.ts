@@ -15,6 +15,7 @@ import { MailService } from 'src/modules/mail/mail.service';
 import { ForgotPasswordDto } from 'src/modules/auth/dto/forgot-password.dto';
 import { ResetPasswordDto } from 'src/modules/auth/dto/reset-password.dto';
 import { VerifyOtpDto } from 'src/modules/auth/dto/verify-otp.dto';
+import { UserStatus } from 'src/common/enum/user.status.enum';
 
 @Injectable()
 export class AuthService {
@@ -37,20 +38,26 @@ export class AuthService {
     const user = await this.usersService.createUser({
       ...dto,
       password: hash,
+      status: UserStatus.PENDING,
     });
 
-    const tokens = await this.getTokens(user.id, user.email, user.role);
-    await this.usersService.updateRefreshToken(
-      user.id,
-      await bcrypt.hash(tokens.refreshToken, 10),
-    );
-    return tokens;
+    return { message: 'Account created, pending approval', user };
   }
 
   async login(dto: LoginAuthDto) {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user || !(await bcrypt.compare(dto.password, user.password)))
       throw new UnauthorizedException('Invalid credentials');
+
+    // Check account status
+    switch (user.status) {
+      case UserStatus.PENDING:
+        throw new UnauthorizedException('Your account is pending approval');
+      case UserStatus.REJECTED:
+        throw new UnauthorizedException('Your account has been rejected');
+      case UserStatus.BLOCKED:
+        throw new UnauthorizedException('Your account has been blocked');
+    }
 
     const tokens = await this.getTokens(user.id, user.email, user.role);
     await this.usersService.updateRefreshToken(
@@ -69,6 +76,11 @@ export class AuthService {
     const user = await this.usersService.findById(userId);
     if (!user || !user.refreshToken)
       throw new ForbiddenException('Access Denied');
+
+    // status check
+    if (!user || !user.refreshToken || user.status !== UserStatus.ACTIVE) {
+      throw new ForbiddenException('Access Denied');
+    }
 
     const match = await bcrypt.compare(refreshToken, user.refreshToken);
     if (!match) throw new ForbiddenException('Invalid refresh token');
@@ -96,11 +108,16 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  
   // Generate & email OTP
   async forgotPassword(dto: ForgotPasswordDto) {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) throw new BadRequestException('No account with that email');
+
+    if (
+      user.status === UserStatus.BLOCKED ||
+      user.status === UserStatus.REJECTED
+    )
+      throw new ForbiddenException('Account is blocked or rejected');
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const hash = await bcrypt.hash(code, 10);
@@ -124,7 +141,10 @@ export class AuthService {
       throw new BadRequestException('OTP expired or invalid');
     }
 
-    const match = await bcrypt.compare(dto.code.toString(), user.resetPasswordCodeHash);
+    const match = await bcrypt.compare(
+      dto.code.toString(),
+      user.resetPasswordCodeHash,
+    );
     if (!match) throw new BadRequestException('Invalid OTP');
 
     // Issue a JWT scoped for password reset
@@ -156,7 +176,12 @@ export class AuthService {
     const user = await this.usersService.findById(payload.sub);
     if (!user) throw new BadRequestException('User no longer exists');
 
-    // Update password & revoke refresh tokens
+    if (
+      user.status === UserStatus.BLOCKED ||
+      user.status === UserStatus.REJECTED
+    )
+      throw new ForbiddenException('Account is blocked or rejected');
+
     user.password = await bcrypt.hash(dto.newPassword, 10);
     user.refreshToken = null;
     await user.save();

@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import { UserStatus } from 'src/common/enum/user.status.enum';
 import { Role } from 'src/common/enum/user_role.enum';
 
 export type UserDocument = User & Document;
@@ -32,11 +33,14 @@ export class User {
   @Prop()
   clinicName?: string;
 
-  @Prop({ default: true })
-  isActive: boolean;
-
   @Prop({ default: false })
   isVerified: boolean;
+
+  // @Prop() 
+  // rejectionReason?: string;
+
+  @Prop({ enum: UserStatus, default: UserStatus.PENDING })
+  status: UserStatus;
 
   @Prop({ type: String, default: null })
   refreshToken?: string | null;

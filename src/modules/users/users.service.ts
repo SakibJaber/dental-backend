@@ -1,22 +1,42 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { UserStatus } from 'src/common/enum/user.status.enum';
 import { User, UserDocument } from 'src/modules/users/user.schema';
 
 @Injectable()
 export class UsersService {
   constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
 
-  findByEmail(email: string) {
-    return this.userModel.findOne({ email }).exec();
+  async findByEmail(email: string) {
+    return await this.userModel.findOne({ email }).exec();
   }
 
-  findById(id: string) {
-    return this.userModel.findById(id);
+  async findById(id: string) {
+    return await this.userModel.findById(id);
   }
 
-  updateRefreshToken(id: string, refreshToken: string | null) {
-    return this.userModel.findByIdAndUpdate(id, { refreshToken });
+  async findByStatus(status: UserStatus) {
+    return await this.userModel.find({ status }).exec();
+  }
+
+  async updateStatus(id: string, status: UserStatus) {
+  const user = await this.userModel.findById(id);
+  if (!user) throw new NotFoundException('User not found');
+
+  user.status = status;
+  
+  // Revoke tokens when blocking or rejecting
+  if (status === UserStatus.BLOCKED || status === UserStatus.REJECTED) {
+    user.refreshToken = null;
+  }
+  
+  await user.save();
+  return { message: `User status updated to ${status}` };
+}
+
+  async updateRefreshToken(id: string, refreshToken: string | null) {
+    return await this.userModel.findByIdAndUpdate(id, { refreshToken });
   }
 
   async createUser(data: Partial<User>) {
