@@ -1,0 +1,90 @@
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  HttpStatus,
+  Query,
+} from '@nestjs/common';
+import { BrandService } from './brand.service';
+import { CreateBrandDto } from './dto/create-brand.dto';
+import { UpdateBrandDto } from './dto/update-brand.dto';
+
+@Controller('brands')
+export class BrandController {
+  constructor(private readonly brandService: BrandService) {}
+
+  @Post()
+  async create(@Body() dto: CreateBrandDto) {
+    const brand = await this.brandService.create(dto);
+    return {
+      statusCode: HttpStatus.CREATED,
+      message: 'Brand created successfully',
+      data: brand,
+    };
+  }
+
+  @Get()
+  async findAll(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+  ) {
+    // Ensure page and limit are numbers, even if they come as strings from query params
+    const parsedPage = parseInt(page as any, 10);
+    const parsedLimit = parseInt(limit as any, 10);
+
+    // Add basic validation for page and limit
+    const validatedPage = parsedPage > 0 ? parsedPage : 1;
+    const validatedLimit =
+      parsedLimit > 0 && parsedLimit <= 100 ? parsedLimit : 10; // Example: limit max to 100
+
+    const result = await this.brandService.findAll(
+      validatedPage,
+      validatedLimit,
+    );
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Brands fetched successfully',
+      data: result.data,
+      meta: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
+      },
+    };
+  }
+
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    const brand = await this.brandService.findOne(id);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Brand fetched successfully',
+      data: brand,
+    };
+  }
+
+  @Patch(':id')
+  async update(@Param('id') id: string, @Body() dto: UpdateBrandDto) {
+    const brand = await this.brandService.update(id, dto);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Brand updated successfully',
+      data: brand,
+    };
+  }
+
+  @Delete(':id')
+  async remove(@Param('id') id: string) {
+    await this.brandService.remove(id);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Brand deleted successfully',
+    };
+  }
+}

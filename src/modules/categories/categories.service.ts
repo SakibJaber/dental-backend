@@ -47,8 +47,40 @@ export class CategoryService {
     }
   }
 
-  async findAll(): Promise<Category[]> {
-    return this.categoryModel.find().exec();
+  async findAll(
+    page = 1,
+    limit = 10,
+    search?: string, // Added search for categories
+  ): Promise<{
+    data: Category[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const query: any = {}; // Start with an empty query
+    if (search) {
+      query.name = { $regex: search, $options: 'i' };
+    }
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      this.categoryModel
+        .find(query)
+        .skip(skip)
+        .limit(limit)
+        .sort({ name: 1 })
+        .exec(),
+      this.categoryModel.countDocuments(query).exec(), // Get total count based on filters
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages,
+    };
   }
 
   async findOne(id: string): Promise<Category> {

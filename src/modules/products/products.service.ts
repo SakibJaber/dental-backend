@@ -55,24 +55,50 @@ export class ProductsService {
     search?: string,
     category?: string,
     isFeatured?: boolean,
-  ): Promise<{ data: Product[]; total: number }> {
-    const query: any = { isVisible: true };
+  ): Promise<{ data: Product[]; total: number; page: number; limit: number; totalPages: number }> {
+    const query: any = { isVisible: true }; // Start with default visibility filter
 
-    if (search) query.name = { $regex: search, $options: 'i' };
-    if (category) query.category = category;
-    if (isFeatured !== undefined) query.isFeatured = isFeatured;
+    // Add search filter if provided
+    if (search) {
+      query.name = { $regex: search, $options: 'i' }; // Case-insensitive search on product name
+    }
 
-    const total = await this.productModel.countDocuments(query);
-    const data = await this.productModel
-      .find(query)
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .populate('category', 'name')
-      .exec();
+    // Add category filter if provided
+    if (category) {
+      query.category = category; // Assuming category is stored as an ObjectId or direct string
+    }
 
-    return { data, total };
+    // Add isFeatured filter if provided (handles true/false/undefined)
+    if (isFeatured !== undefined) {
+      query.isFeatured = isFeatured;
+    }
+
+    // Calculate skip value for pagination
+    const skip = (page - 1) * limit;
+
+    // Execute count and find queries concurrently for better performance
+    const [data, total] = await Promise.all([
+      this.productModel
+        .find(query)
+        .skip(skip)
+        .limit(limit)
+        .populate('category', 'name') // Populate the category field, only returning its 'name'
+        .exec(),
+      this.productModel.countDocuments(query).exec(), // Get total count based on all filters
+    ]);
+
+    // Calculate total pages
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages,
+    };
   }
-
+  
   async findOne(id: string): Promise<Product> {
     const product = await this.productModel
       .findById(id)

@@ -8,6 +8,9 @@ import {
   UploadedFile,
   HttpStatus,
   Patch,
+  DefaultValuePipe,
+  ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import { Category } from './category.schema';
 import { CategoryService } from './categories.service';
@@ -34,12 +37,31 @@ export class CategoryController {
   }
 
   @Get()
-  async findAll() {
-    const categories = await this.categoryService.findAll();
+  async findAll(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('search') search?: string,
+  ) {
+    const validatedPage = page > 0 ? page : 1;
+    const validatedLimit = limit > 0 && limit <= 100 ? limit : 10; // Max 100 items per page
+
+    const result = await this.categoryService.findAll(
+      validatedPage,
+      validatedLimit,
+      search,
+    );
+
     return {
       statusCode: HttpStatus.OK,
       message: 'Categories fetched successfully',
-      data: categories,
+      data: result.data,
+      meta: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
+        ...(search && { search }), // Include search in meta if it was used
+      },
     };
   }
 
@@ -60,7 +82,11 @@ export class CategoryController {
     @Body() updateCategoryDto: UpdateCategoryDto,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    const updated = await this.categoryService.update(id, updateCategoryDto, file);
+    const updated = await this.categoryService.update(
+      id,
+      updateCategoryDto,
+      file,
+    );
     return {
       statusCode: HttpStatus.OK,
       message: 'Category updated successfully',

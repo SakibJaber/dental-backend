@@ -9,6 +9,9 @@ import {
   Query,
   UploadedFiles,
   HttpStatus,
+  DefaultValuePipe,
+  ParseBoolPipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -36,23 +39,40 @@ export class ProductsController {
 
   @Get()
   async findAll(
-    @Query('page') page = 1,
-    @Query('limit') limit = 10,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('search') search?: string,
     @Query('category') category?: string,
-    @Query('isFeatured') isFeatured?: boolean,
+    @Query('isFeatured', new ParseBoolPipe({ optional: true }))
+    isFeatured?: boolean,
   ) {
+    // Basic validation and sanitization for page and limit (optional, but good practice)
+    const validatedPage = page > 0 ? page : 1;
+    const validatedLimit = limit > 0 && limit <= 100 ? limit : 10; // Example: limit max to 100 items per page
+
     const result = await this.productsService.findAll(
-      +page,
-      +limit,
+      validatedPage,
+      validatedLimit,
       search,
       category,
       isFeatured,
     );
+
     return {
       statusCode: HttpStatus.OK,
       message: 'Products fetched successfully',
-      data: result,
+      data: result.data, // The actual array of product documents
+      meta: {
+        // Pagination and filtering metadata
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
+        // Include filter information for clarity in the response
+        ...(search && { search }),
+        ...(category && { category }),
+        ...(isFeatured !== undefined && { isFeatured }),
+      },
     };
   }
 
@@ -73,7 +93,11 @@ export class ProductsController {
     @Body() updateProductDto: UpdateProductDto,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    const updated = await this.productsService.update(id, updateProductDto, files);
+    const updated = await this.productsService.update(
+      id,
+      updateProductDto,
+      files,
+    );
     return {
       statusCode: HttpStatus.OK,
       message: 'Product updated successfully',
