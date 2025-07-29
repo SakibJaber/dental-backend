@@ -36,9 +36,6 @@ export class User {
   @Prop({ default: false })
   isVerified: boolean;
 
-  // @Prop() 
-  // rejectionReason?: string;
-
   @Prop({ enum: UserStatus, default: UserStatus.PENDING })
   status: UserStatus;
 

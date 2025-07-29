@@ -1,4 +1,11 @@
-import { Controller, Post, Body, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Req,
+  UseGuards,
+  UploadedFile,
+} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupAuthDto } from './dto/signup-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
@@ -7,14 +14,19 @@ import { RefreshTokenGuard } from 'src/common/guard/refresh-token.guard';
 import { ForgotPasswordDto } from 'src/modules/auth/dto/forgot-password.dto';
 import { ResetPasswordDto } from 'src/modules/auth/dto/reset-password.dto';
 import { VerifyOtpDto } from 'src/modules/auth/dto/verify-otp.dto';
+import { UseGlobalFileInterceptor } from 'src/common/decorator/globalFileInterceptor.decorator';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('signup')
-  signup(@Body() dto: SignupAuthDto) {
-    return this.authService.signup(dto);
+  @UseGlobalFileInterceptor({ fieldName: 'image' })
+  signup(
+    @Body() dto: SignupAuthDto,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.authService.signup(dto,file);
   }
 
   @Post('login')
@@ -22,7 +34,7 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
-   @Post('forgot')
+  @Post('forgot')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
@@ -42,7 +54,6 @@ export class AuthController {
   logout(@Req() req: any) {
     return this.authService.logout(req.user.userId);
   }
-
 
   @UseGuards(RefreshTokenGuard)
   @Post('refresh')

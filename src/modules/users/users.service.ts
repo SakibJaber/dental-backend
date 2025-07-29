@@ -21,26 +21,26 @@ export class UsersService {
   }
 
   async updateStatus(id: string, status: UserStatus) {
-  const user = await this.userModel.findById(id);
-  if (!user) throw new NotFoundException('User not found');
+    const user = await this.userModel.findById(id);
+    if (!user) throw new NotFoundException('User not found');
 
-  user.status = status;
-  
-  // Revoke tokens when blocking or rejecting
-  if (status === UserStatus.BLOCKED || status === UserStatus.REJECTED) {
-    user.refreshToken = null;
+    user.status = status;
+
+    // Revoke tokens when blocking or rejecting
+    if (status === UserStatus.BLOCKED || status === UserStatus.REJECTED) {
+      user.refreshToken = null;
+    }
+
+    await user.save();
+    return { message: `User status updated to ${status}` };
   }
-  
-  await user.save();
-  return { message: `User status updated to ${status}` };
-}
 
   async updateRefreshToken(id: string, refreshToken: string | null) {
     return await this.userModel.findByIdAndUpdate(id, { refreshToken });
   }
 
-  async createUser(data: Partial<User>) {
+  async createUser(data: Partial<User>): Promise<User> {
     const user = new this.userModel(data);
-    return user.save();
+    return await user.save();
   }
 }

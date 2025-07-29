@@ -3,7 +3,6 @@ import {
   UnauthorizedException,
   ForbiddenException,
   BadRequestException,
-  NotFoundException,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
@@ -16,12 +15,14 @@ import { ForgotPasswordDto } from 'src/modules/auth/dto/forgot-password.dto';
 import { ResetPasswordDto } from 'src/modules/auth/dto/reset-password.dto';
 import { VerifyOtpDto } from 'src/modules/auth/dto/verify-otp.dto';
 import { UserStatus } from 'src/common/enum/user.status.enum';
+import { FileUploadService } from 'src/modules/file-upload/file-upload.service';
 
 @Injectable()
 export class AuthService {
   private readonly otpExpiryMs: number;
   constructor(
     private usersService: UsersService,
+    private fileUploadService: FileUploadService,
     private mailService: MailService,
     private jwt: JwtService,
     private config: ConfigService,
@@ -30,14 +31,21 @@ export class AuthService {
       (+this.config.get<number>('OTP_EXPIRATION_MINUTES')! || 15) * 60 * 1000;
   }
 
-  async signup(dto: SignupAuthDto) {
+  async signup(dto: SignupAuthDto, file?: Express.Multer.File) {
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) throw new ForbiddenException('Email already exists');
 
     const hash = await bcrypt.hash(dto.password, 10);
+
+    let imageUrl: string | undefined;
+    if (file) {
+      imageUrl = await this.fileUploadService.handleUpload(file); // assuming you have this service
+    }
+
     const user = await this.usersService.createUser({
       ...dto,
       password: hash,
+      imageUrl,
       status: UserStatus.PENDING,
     });
 
