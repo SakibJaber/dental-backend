@@ -55,41 +55,38 @@ export class ProductsService {
     search?: string,
     category?: string,
     isFeatured?: boolean,
-  ): Promise<{ data: Product[]; total: number; page: number; limit: number; totalPages: number }> {
-    const query: any = { isVisible: true }; // Start with default visibility filter
-
-    // Add search filter if provided
+  ): Promise<{
+    data: Product[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const query: any = { isVisible: true };
     if (search) {
-      query.name = { $regex: search, $options: 'i' }; // Case-insensitive search on product name
+      query.name = { $regex: search, $options: 'i' };
     }
-
-    // Add category filter if provided
     if (category) {
-      query.category = category; // Assuming category is stored as an ObjectId or direct string
+      query.category = category;
     }
-
-    // Add isFeatured filter if provided (handles true/false/undefined)
     if (isFeatured !== undefined) {
       query.isFeatured = isFeatured;
     }
 
     // Calculate skip value for pagination
     const skip = (page - 1) * limit;
-
-    // Execute count and find queries concurrently for better performance
     const [data, total] = await Promise.all([
       this.productModel
         .find(query)
         .skip(skip)
         .limit(limit)
-        .populate('category', 'name') // Populate the category field, only returning its 'name'
+        .populate('category', 'name')
+        .populate('brand', 'name')
+        .populate('procedure', 'name') 
         .exec(),
-      this.productModel.countDocuments(query).exec(), // Get total count based on all filters
+      this.productModel.countDocuments(query).exec(),
     ]);
-
-    // Calculate total pages
     const totalPages = Math.ceil(total / limit);
-
     return {
       data,
       total,
@@ -98,11 +95,13 @@ export class ProductsService {
       totalPages,
     };
   }
-  
+
   async findOne(id: string): Promise<Product> {
     const product = await this.productModel
       .findById(id)
       .populate('category', 'name')
+      .populate('brand', 'name')
+      .populate('procedure', 'name') 
       .exec();
 
     if (!product) {
@@ -123,6 +122,7 @@ export class ProductsService {
     let newImageUrls = existingProduct.imageUrl;
 
     if (files && files.length > 0) {
+      // Delete old images if new ones are uploaded
       if (existingProduct.imageUrl?.length) {
         await Promise.all(
           existingProduct.imageUrl.map((url) =>
@@ -130,7 +130,6 @@ export class ProductsService {
           ),
         );
       }
-
       newImageUrls = await Promise.all(
         files.map((file) => this.fileUploadService.handleUpload(file)),
       );
@@ -145,6 +144,9 @@ export class ProductsService {
         },
         { new: true },
       )
+      .populate('category', 'name')
+      .populate('brand', 'name')
+      .populate('procedure', 'name') // Added procedure population
       .exec();
 
     if (!updatedProduct) {
@@ -153,19 +155,17 @@ export class ProductsService {
         message: `Product with ID ${id} not found`,
       });
     }
-
     return updatedProduct;
   }
 
   async remove(id: string): Promise<void> {
     const result = await this.findOne(id);
-
+    // Delete associated images
     if (result.imageUrl?.length) {
       await Promise.all(
         result.imageUrl.map((url) => this.fileUploadService.deleteFile(url)),
       );
     }
-
     await this.productModel.findByIdAndDelete(id).exec();
   }
 
@@ -177,7 +177,6 @@ export class ProductsService {
         message: `Product with ID ${id} not found`,
       });
     }
-
     product.isVisible = !product.isVisible;
     return product.save();
   }

@@ -32,14 +32,13 @@ export class BrandController {
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
   ) {
-    // Ensure page and limit are numbers, even if they come as strings from query params
     const parsedPage = parseInt(page as any, 10);
     const parsedLimit = parseInt(limit as any, 10);
 
     // Add basic validation for page and limit
     const validatedPage = parsedPage > 0 ? parsedPage : 1;
     const validatedLimit =
-      parsedLimit > 0 && parsedLimit <= 100 ? parsedLimit : 10; // Example: limit max to 100
+      parsedLimit > 0 && parsedLimit <= 100 ? parsedLimit : 10; 
 
     const result = await this.brandService.findAll(
       validatedPage,

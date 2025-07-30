@@ -1,16 +1,20 @@
 import {
-  IsString,
+  IsArray,
+  IsBoolean,
+  IsMongoId,
   IsNumber,
   IsOptional,
-  IsMongoId,
+  IsString,
 } from 'class-validator';
-import { CreateProductDto } from './create-product.dto';
-import { PartialType } from '@nestjs/mapped-types';
 
-export class UpdateProductDto extends PartialType(CreateProductDto) {
+export class UpdateProductDto {
   @IsString()
   @IsOptional()
   name?: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
 
   @IsNumber()
   @IsOptional()
@@ -19,4 +23,25 @@ export class UpdateProductDto extends PartialType(CreateProductDto) {
   @IsMongoId()
   @IsOptional()
   category?: string;
+
+  @IsMongoId()
+  @IsOptional()
+  brand?: string;
+
+  @IsMongoId()
+  @IsOptional()
+  procedure?: string;
+
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  imageUrl?: string[];
+
+  @IsBoolean()
+  @IsOptional()
+  isVisible?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  isFeatured?: boolean;
 }

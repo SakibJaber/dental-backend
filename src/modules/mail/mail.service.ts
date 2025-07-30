@@ -15,7 +15,7 @@ export class MailService {
         pass: config.get('MAIL_PASS'),
       },
     });
-  };
+  }
 
   async sendResetPasswordOtp(email: string, code: string) {
     try {

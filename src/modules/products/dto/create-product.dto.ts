@@ -23,7 +23,15 @@ export class CreateProductDto {
 
   @IsMongoId()
   @IsNotEmpty()
-  category: string; // Will be converted to ObjectId
+  category: string;
+
+  @IsMongoId()
+  @IsNotEmpty()
+  brand: string;
+
+  @IsMongoId()
+  @IsNotEmpty()
+  procedure: string;
 
   @IsArray()
   @IsOptional()

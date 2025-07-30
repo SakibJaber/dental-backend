@@ -43,13 +43,12 @@ export class ProductsController {
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('search') search?: string,
     @Query('category') category?: string,
+    @Query('procedure') procedure?: string,
     @Query('isFeatured', new ParseBoolPipe({ optional: true }))
     isFeatured?: boolean,
   ) {
-    // Basic validation and sanitization for page and limit (optional, but good practice)
     const validatedPage = page > 0 ? page : 1;
-    const validatedLimit = limit > 0 && limit <= 100 ? limit : 10; // Example: limit max to 100 items per page
-
+    const validatedLimit = limit > 0 && limit <= 100 ? limit : 10;
     const result = await this.productsService.findAll(
       validatedPage,
       validatedLimit,
@@ -61,7 +60,7 @@ export class ProductsController {
     return {
       statusCode: HttpStatus.OK,
       message: 'Products fetched successfully',
-      data: result.data, // The actual array of product documents
+      data: result.data,
       meta: {
         // Pagination and filtering metadata
         total: result.total,
@@ -71,6 +70,7 @@ export class ProductsController {
         // Include filter information for clarity in the response
         ...(search && { search }),
         ...(category && { category }),
+        ...(procedure && { procedure }), 
         ...(isFeatured !== undefined && { isFeatured }),
       },
     };

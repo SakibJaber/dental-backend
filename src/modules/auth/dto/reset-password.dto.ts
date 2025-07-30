@@ -2,15 +2,13 @@ import {
   IsEmail,
   IsString,
   MinLength,
-  Length,
-  IsNumber,
 } from 'class-validator';
 
 export class ResetPasswordDto {
   @IsEmail()
   email: string;
 
-  @IsString() 
+  @IsString()
   resetToken: string;
 
   @IsString()

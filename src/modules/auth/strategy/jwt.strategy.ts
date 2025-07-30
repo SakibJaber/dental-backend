@@ -8,30 +8,30 @@ import { UserStatus } from 'src/common/enum/user.status.enum';
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    private readonly config: ConfigService, // Added 'readonly' for immutability
+    private readonly config: ConfigService,
     private readonly usersService: UsersService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: config.getOrThrow<string>('JWT_SECRET'), // Secure secret retrieval
+      secretOrKey: config.getOrThrow<string>('JWT_SECRET'),
     });
   }
 
   async validate(
     payload: any,
   ): Promise<{ userId: string; email: string; role: string }> {
-    // Step 1: Validate payload structure
+    // Validate payload structure
     if (!payload?.userId || !payload?.email || !payload?.role) {
       throw new UnauthorizedException('Invalid token payload');
     }
 
-    // Step 2: Fetch user from database
+    // Fetch user from database
     const user = await this.usersService.findById(payload.userId);
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
 
-    // Step 3: Check user status with specific error messages
+    // Check user status with specific error messages
     switch (user.status) {
       case UserStatus.ACTIVE:
         return {

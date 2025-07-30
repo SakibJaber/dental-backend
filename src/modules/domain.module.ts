@@ -9,6 +9,7 @@ import { AddressModule } from './address/address.module';
 import { LegalPageModule } from './legal-page/legal-page.module';
 import { ContactInfoModule } from 'src/modules/contacts/contact-info/contact-info.module';
 import { ContactModule } from 'src/modules/contacts/contact/contact.module';
+import { ProcedureModule } from './procedure/procedure.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ContactModule } from 'src/modules/contacts/contact/contact.module';
     LegalPageModule,
     ContactInfoModule,
     ContactModule,
+    ProcedureModule,
   ],
   controllers: [],
   providers: [],

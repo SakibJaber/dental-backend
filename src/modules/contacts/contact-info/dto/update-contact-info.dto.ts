@@ -1,4 +1,3 @@
-// dto/update-contact-info.dto.ts
 import { IsArray, IsEmail, IsOptional, IsString, IsUrl } from 'class-validator';
 
 export class UpdateContactInfoDto {
