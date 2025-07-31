@@ -10,6 +10,8 @@ import { LegalPageModule } from './legal-page/legal-page.module';
 import { ContactInfoModule } from 'src/modules/contacts/contact-info/contact-info.module';
 import { ContactModule } from 'src/modules/contacts/contact/contact.module';
 import { ProcedureModule } from './procedure/procedure.module';
+import { CmsModule } from 'src/modules/cms/cms.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { ProcedureModule } from './procedure/procedure.module';
     ContactInfoModule,
     ContactModule,
     ProcedureModule,
+    CmsModule,
+    NotificationModule
   ],
   controllers: [],
   providers: [],

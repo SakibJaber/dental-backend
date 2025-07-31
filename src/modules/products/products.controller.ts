@@ -17,7 +17,7 @@ import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UseGlobalFileInterceptor } from 'src/common/decorator/globalFileInterceptor.decorator';
-import { Product } from 'src/modules/products/product.schema';
+import { ProductAvailability } from 'src/common/enum/product-availability.enum';
 
 @Controller('products')
 export class ProductsController {
@@ -44,9 +44,10 @@ export class ProductsController {
     @Query('search') search?: string,
     @Query('category') category?: string,
     @Query('procedure') procedure?: string,
-    @Query('isFeatured', new ParseBoolPipe({ optional: true }))
-    isFeatured?: boolean,
+    @Query('availability') availability?: ProductAvailability,
+    @Query('isFeatured', new DefaultValuePipe(undefined), ParseBoolPipe) isFeatured?: boolean,
   ) {
+    // Validate values
     const validatedPage = page > 0 ? page : 1;
     const validatedLimit = limit > 0 && limit <= 100 ? limit : 10;
     const result = await this.productsService.findAll(
@@ -55,6 +56,8 @@ export class ProductsController {
       search,
       category,
       isFeatured,
+      availability,
+      procedure, // pass procedure to service
     );
 
     return {
@@ -70,8 +73,8 @@ export class ProductsController {
         // Include filter information for clarity in the response
         ...(search && { search }),
         ...(category && { category }),
-        ...(procedure && { procedure }), 
-        ...(isFeatured !== undefined && { isFeatured }),
+        ...(procedure && { procedure }),
+        ...(typeof isFeatured === 'boolean' && { isFeatured }),
       },
     };
   }
@@ -80,7 +83,7 @@ export class ProductsController {
   async findOne(@Param('id') id: string) {
     const product = await this.productsService.findOne(id);
     return {
-      statusCode: HttpStatus.FOUND,
+      statusCode: HttpStatus.OK,
       message: 'Product fetched successfully',
       data: product,
     };
@@ -111,16 +114,6 @@ export class ProductsController {
     return {
       statusCode: HttpStatus.OK,
       message: 'Product deleted successfully',
-    };
-  }
-
-  @Patch(':id/toggle-visibility')
-  async toggleVisibility(@Param('id') id: string) {
-    const updated = await this.productsService.toggleVisibility(id);
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'Product visibility toggled successfully',
-      data: updated,
     };
   }
 }

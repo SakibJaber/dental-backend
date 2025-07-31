@@ -16,12 +16,14 @@ import { ResetPasswordDto } from 'src/modules/auth/dto/reset-password.dto';
 import { VerifyOtpDto } from 'src/modules/auth/dto/verify-otp.dto';
 import { UserStatus } from 'src/common/enum/user.status.enum';
 import { FileUploadService } from 'src/modules/file-upload/file-upload.service';
+import { NotificationService } from 'src/modules/notification/notification.service';
 
 @Injectable()
 export class AuthService {
   private readonly otpExpiryMs: number;
   constructor(
     private usersService: UsersService,
+    private readonly notificationService: NotificationService,
     private fileUploadService: FileUploadService,
     private mailService: MailService,
     private jwt: JwtService,
@@ -49,6 +51,18 @@ export class AuthService {
       status: UserStatus.PENDING,
     });
 
+    // Notify all admins
+    const admins = await this.usersService.findAllByRole('admin');
+    await Promise.all(
+      admins.map((admin) =>
+        this.notificationService.createNotification({
+          title: 'New signup',
+          body: `${user.email} has signed up and needs approval.`,
+          user: admin.id, // admin's userId
+          metadata: { signup: true, newUserId: (user as any)._id },
+        }),
+      ),
+    );
     return { message: 'Account created, pending approval', user };
   }
 
@@ -86,7 +100,7 @@ export class AuthService {
       throw new ForbiddenException('Access Denied');
 
     // status check
-    if (!user || !user.refreshToken || user.status !== UserStatus.ACTIVE) {
+    if (!user || !user.refreshToken || user.status !== UserStatus.APPROVED) {
       throw new ForbiddenException('Access Denied');
     }
 

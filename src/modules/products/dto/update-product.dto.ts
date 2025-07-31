@@ -1,11 +1,13 @@
 import {
   IsArray,
-  IsBoolean,
+  IsEnum,
   IsMongoId,
   IsNumber,
   IsOptional,
   IsString,
+  IsBoolean,
 } from 'class-validator';
+import { ProductAvailability } from 'src/common/enum/product-availability.enum';
 
 export class UpdateProductDto {
   @IsString()
@@ -37,9 +39,9 @@ export class UpdateProductDto {
   @IsString({ each: true })
   imageUrl?: string[];
 
-  @IsBoolean()
+  @IsEnum(ProductAvailability)
   @IsOptional()
-  isVisible?: boolean;
+  availability?: ProductAvailability;
 
   @IsBoolean()
   @IsOptional()

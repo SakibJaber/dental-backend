@@ -17,6 +17,20 @@ export class MailService {
     });
   }
 
+  async sendEmail(to: string, subject: string, text: string, html?: string) {
+    try {
+      await this.transporter.sendMail({
+        from: this.config.get('MAIL_FROM'),
+        to,
+        subject,
+        text,
+        html,
+      });
+    } catch (err) {
+      throw new InternalServerErrorException('Failed to send email');
+    }
+  }
+
   async sendResetPasswordOtp(email: string, code: string) {
     try {
       await this.transporter.sendMail({

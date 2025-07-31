@@ -11,6 +11,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from 'src/modules/products/product.schema';
 import { FileUploadService } from 'src/modules/file-upload/file-upload.service';
+import { ProductAvailability } from 'src/common/enum/product-availability.enum';
 
 @Injectable()
 export class ProductsService {
@@ -55,6 +56,8 @@ export class ProductsService {
     search?: string,
     category?: string,
     isFeatured?: boolean,
+    availability?: ProductAvailability,
+    procedure?: string, // ADDED: procedure filter
   ): Promise<{
     data: Product[];
     total: number;
@@ -62,18 +65,13 @@ export class ProductsService {
     limit: number;
     totalPages: number;
   }> {
-    const query: any = { isVisible: true };
-    if (search) {
-      query.name = { $regex: search, $options: 'i' };
-    }
-    if (category) {
-      query.category = category;
-    }
-    if (isFeatured !== undefined) {
-      query.isFeatured = isFeatured;
-    }
+    const query: any = {};
+    if (search) query.name = { $regex: search, $options: 'i' };
+    if (category) query.category = category;
+    if (isFeatured !== undefined) query.isFeatured = isFeatured;
+    if (availability) query.availability = availability;
+    if (procedure) query.procedure = procedure; // Add procedure filtering
 
-    // Calculate skip value for pagination
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
       this.productModel
@@ -82,7 +80,7 @@ export class ProductsService {
         .limit(limit)
         .populate('category', 'name')
         .populate('brand', 'name')
-        .populate('procedure', 'name') 
+        .populate('procedure', 'name')
         .exec(),
       this.productModel.countDocuments(query).exec(),
     ]);
@@ -101,7 +99,7 @@ export class ProductsService {
       .findById(id)
       .populate('category', 'name')
       .populate('brand', 'name')
-      .populate('procedure', 'name') 
+      .populate('procedure', 'name')
       .exec();
 
     if (!product) {
@@ -122,7 +120,6 @@ export class ProductsService {
     let newImageUrls = existingProduct.imageUrl;
 
     if (files && files.length > 0) {
-      // Delete old images if new ones are uploaded
       if (existingProduct.imageUrl?.length) {
         await Promise.all(
           existingProduct.imageUrl.map((url) =>
@@ -146,7 +143,7 @@ export class ProductsService {
       )
       .populate('category', 'name')
       .populate('brand', 'name')
-      .populate('procedure', 'name') // Added procedure population
+      .populate('procedure', 'name')
       .exec();
 
     if (!updatedProduct) {
@@ -159,25 +156,12 @@ export class ProductsService {
   }
 
   async remove(id: string): Promise<void> {
-    const result = await this.findOne(id);
-    // Delete associated images
-    if (result.imageUrl?.length) {
+    const product = await this.findOne(id);
+    if (product.imageUrl?.length) {
       await Promise.all(
-        result.imageUrl.map((url) => this.fileUploadService.deleteFile(url)),
+        product.imageUrl.map((url) => this.fileUploadService.deleteFile(url)),
       );
     }
     await this.productModel.findByIdAndDelete(id).exec();
-  }
-
-  async toggleVisibility(id: string): Promise<Product> {
-    const product = await this.productModel.findById(id).exec();
-    if (!product) {
-      throw new NotFoundException({
-        statusCode: HttpStatus.NOT_FOUND,
-        message: `Product with ID ${id} not found`,
-      });
-    }
-    product.isVisible = !product.isVisible;
-    return product.save();
   }
 }

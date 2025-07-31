@@ -19,7 +19,7 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   async approveUser(@Param('id') id: string) {
-    await this.usersService.updateStatus(id, UserStatus.ACTIVE);
+    await this.usersService.updateStatus(id, UserStatus.APPROVED);
     const updatedUser = await this.usersService.findById(id);
     return { message: 'User approved successfully', user: updatedUser };
   }
@@ -42,6 +42,6 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   unblockUser(@Param('id') id: string) {
-    return this.usersService.updateStatus(id, UserStatus.ACTIVE);
+    return this.usersService.updateStatus(id, UserStatus.APPROVED);
   }
 }

@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import { ProductAvailability } from 'src/common/enum/product-availability.enum';
 
 @Schema({ timestamps: true })
 export class Product extends Document {
@@ -24,8 +25,11 @@ export class Product extends Document {
   @Prop({ type: [String], default: [] })
   imageUrl: string[];
 
-  @Prop({ default: true })
-  isVisible: boolean;
+  @Prop({
+    required: true,
+    enum: Object.values(ProductAvailability),
+  })
+  availability: ProductAvailability;
 
   @Prop({ default: false })
   isFeatured: boolean;
