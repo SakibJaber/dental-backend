@@ -120,11 +120,11 @@ export class AuthService {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(payload, {
         secret: this.config.get<string>('JWT_SECRET'),
-        expiresIn: '15m',
+        expiresIn: this.config.get<string>('JWT_ACC_EXPIRATION'),
       }),
       this.jwt.signAsync(payload, {
         secret: this.config.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: '7d',
+        expiresIn: this.config.get<string>('JWT_REF_EXPIRATION'),
       }),
     ]);
     return { accessToken, refreshToken };
@@ -173,7 +173,7 @@ export class AuthService {
     const payload = { sub: user.id, email: user.email };
     const resetToken = await this.jwt.signAsync(payload, {
       secret: this.config.get<string>('JWT_RESET_SECRET'),
-      expiresIn: '15m',
+      expiresIn: this.config.get<string>('JWT_ACC_EXPIRATION'),
     });
 
     // clear OTP fields now or after reset

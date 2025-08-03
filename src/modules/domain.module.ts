@@ -12,6 +12,8 @@ import { ContactModule } from 'src/modules/contacts/contact/contact.module';
 import { ProcedureModule } from './procedure/procedure.module';
 import { CmsModule } from 'src/modules/cms/cms.module';
 import { NotificationModule } from './notification/notification.module';
+import { OrderModule } from './order/order.module';
+import { CartModule } from './cart/cart.module';
 
 @Module({
   imports: [
@@ -27,7 +29,9 @@ import { NotificationModule } from './notification/notification.module';
     ContactModule,
     ProcedureModule,
     CmsModule,
-    NotificationModule
+    NotificationModule,
+    OrderModule,
+    CartModule
   ],
   controllers: [],
   providers: [],

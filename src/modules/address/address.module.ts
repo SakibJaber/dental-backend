@@ -12,5 +12,6 @@ import { UsersModule } from 'src/modules/users/users.module';
   ],
   controllers: [AddressController],
   providers: [AddressService],
+  exports: [AddressService],
 })
 export class AddressModule {}

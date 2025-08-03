@@ -55,9 +55,11 @@ export class ProductsService {
     limit = 10,
     search?: string,
     category?: string,
-    isFeatured?: boolean,
     availability?: ProductAvailability,
-    procedure?: string, // ADDED: procedure filter
+    procedureType?: string,
+    brand?: string,
+    minPrice?: number,
+    maxPrice?: number,
   ): Promise<{
     data: Product[];
     total: number;
@@ -68,9 +70,14 @@ export class ProductsService {
     const query: any = {};
     if (search) query.name = { $regex: search, $options: 'i' };
     if (category) query.category = category;
-    if (isFeatured !== undefined) query.isFeatured = isFeatured;
     if (availability) query.availability = availability;
-    if (procedure) query.procedure = procedure; // Add procedure filtering
+    if (procedureType) query.procedure = procedureType;
+    if (brand) query.brand = brand;
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      query.price = {};
+      if (minPrice !== undefined) query.price.$gte = minPrice;
+      if (maxPrice !== undefined) query.price.$lte = maxPrice;
+    }
 
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
@@ -153,6 +160,25 @@ export class ProductsService {
       });
     }
     return updatedProduct;
+  }
+
+  async getHotProducts(
+    limit = 10,
+    sortBy: 'sales' | 'views' | 'featured' = 'sales',
+  ): Promise<Product[]> {
+    let sort: any = {};
+    if (sortBy === 'sales') sort = { salesCount: -1 };
+    else if (sortBy === 'views') sort = { views: -1 };
+    else if (sortBy === 'featured') sort = { isFeatured: -1 };
+
+    return this.productModel
+      .find({})
+      .sort(sort)
+      .limit(limit)
+      .populate('category', 'name')
+      .populate('brand', 'name')
+      .populate('procedure', 'name')
+      .exec();
   }
 
   async remove(id: string): Promise<void> {

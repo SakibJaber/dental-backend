@@ -43,21 +43,22 @@ export class ProductsController {
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('search') search?: string,
     @Query('category') category?: string,
-    @Query('procedure') procedure?: string,
+    @Query('procedureType') procedureType?: string,
+    @Query('brand') brand?: string,
     @Query('availability') availability?: ProductAvailability,
-    @Query('isFeatured', new DefaultValuePipe(undefined), ParseBoolPipe) isFeatured?: boolean,
+    @Query('minPrice') minPrice?: number,
+    @Query('maxPrice') maxPrice?: number,
   ) {
-    // Validate values
-    const validatedPage = page > 0 ? page : 1;
-    const validatedLimit = limit > 0 && limit <= 100 ? limit : 10;
     const result = await this.productsService.findAll(
-      validatedPage,
-      validatedLimit,
+      page,
+      limit,
       search,
       category,
-      isFeatured,
       availability,
-      procedure, // pass procedure to service
+      procedureType,
+      brand,
+      minPrice,
+      maxPrice,
     );
 
     return {
@@ -73,9 +74,29 @@ export class ProductsController {
         // Include filter information for clarity in the response
         ...(search && { search }),
         ...(category && { category }),
-        ...(procedure && { procedure }),
-        ...(typeof isFeatured === 'boolean' && { isFeatured }),
+        ...(procedureType && { procedureType }),
+        ...(brand && { brand }),
+        ...(availability && { availability }),
+        ...(minPrice && { minPrice }),
+        ...(maxPrice && { maxPrice }),
       },
+    };
+  }
+
+  @Get('hot')
+  async getHotProducts(
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('sortBy') sortBy?: 'sales' | 'views' | 'featured',
+  ) {
+    // You can add more sorting options as needed
+    const hotProducts = await this.productsService.getHotProducts(
+      limit,
+      sortBy,
+    );
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Hot products fetched successfully',
+      data: hotProducts,
     };
   }
 

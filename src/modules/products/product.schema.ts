@@ -31,6 +31,12 @@ export class Product extends Document {
   })
   availability: ProductAvailability;
 
+  @Prop({ default: 0 })
+  salesCount: number;
+
+  @Prop({ default: 0 })
+  views: number;
+
   @Prop({ default: false })
   isFeatured: boolean;
 }
