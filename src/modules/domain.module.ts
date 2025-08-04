@@ -14,6 +14,7 @@ import { CmsModule } from 'src/modules/cms/cms.module';
 import { NotificationModule } from './notification/notification.module';
 import { OrderModule } from './order/order.module';
 import { CartModule } from './cart/cart.module';
+import { GlobalSearchModule } from './global-search/global-search.module';
 
 @Module({
   imports: [
@@ -31,7 +32,8 @@ import { CartModule } from './cart/cart.module';
     CmsModule,
     NotificationModule,
     OrderModule,
-    CartModule
+    CartModule,
+    GlobalSearchModule
   ],
   controllers: [],
   providers: [],

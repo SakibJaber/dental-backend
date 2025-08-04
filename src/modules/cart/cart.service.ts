@@ -3,16 +3,21 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Cart } from './cart.schema';
 import { AddToCartDto } from 'src/modules/cart/dto/create-cart.dto';
+import { NotificationService } from 'src/modules/notification/notification.service';
+import { User } from 'src/modules/users/schema/user.schema';
 
 @Injectable()
 export class CartService {
   constructor(
     @InjectModel(Cart.name) private readonly cartModel: Model<Cart>,
+    @InjectModel(User.name) private readonly userModel: Model<User>,
+    private readonly notificationService: NotificationService,
   ) {}
 
   async addToCart(userId: string, dto: AddToCartDto) {
-    console.log('Looking for cart with user:', userId);
-    let cart = await this.cartModel.findOne({ user: new Types.ObjectId(userId) });
+    let cart = await this.cartModel.findOne({
+      user: new Types.ObjectId(userId),
+    });
     if (!cart) {
       cart = new this.cartModel({
         user: new Types.ObjectId(userId),
@@ -41,7 +46,9 @@ export class CartService {
   }
 
   async updateCartItem(userId: string, productId: string, quantity: number) {
-    const cart = await this.cartModel.findOne({ user: new Types.ObjectId(userId) });
+    const cart = await this.cartModel.findOne({
+      user: new Types.ObjectId(userId),
+    });
     if (!cart) throw new NotFoundException('Cart not found');
     const idx = cart.items.findIndex((i) => i.product.toString() === productId);
     if (idx > -1) {
@@ -52,7 +59,9 @@ export class CartService {
   }
 
   async removeCartItem(userId: string, productId: string) {
-    const cart = await this.cartModel.findOne({ user: new Types.ObjectId(userId) });
+    const cart = await this.cartModel.findOne({
+      user: new Types.ObjectId(userId),
+    });
     if (!cart) throw new NotFoundException('Cart not found');
     cart.items = cart.items.filter((i) => i.product.toString() !== productId);
     await cart.save();
@@ -61,5 +70,12 @@ export class CartService {
 
   async clearCart(userId: string) {
     await this.cartModel.deleteOne({ user: new Types.ObjectId(userId) });
+    // Notify user
+    await this.notificationService.createNotification({
+      title: 'Cart Cleared',
+      body: 'Your shopping cart has been cleared.',
+      user: userId,
+      metadata: { event: 'cart_cleared' },
+    });
   }
 }

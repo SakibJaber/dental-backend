@@ -7,6 +7,7 @@ import { AddressModule } from 'src/modules/address/address.module';
 import { CartModule } from 'src/modules/cart/cart.module';
 import { Address, AddressSchema } from 'src/modules/address/address.schema';
 import { Cart, CartSchema } from 'src/modules/cart/cart.schema';
+import { User, UserSchema } from 'src/modules/users/schema/user.schema';
 
 @Module({
   imports: [
@@ -16,8 +17,8 @@ import { Cart, CartSchema } from 'src/modules/cart/cart.schema';
       { name: Order.name, schema: OrderSchema },
       { name: Cart.name, schema: CartSchema },
       { name: Address.name, schema: AddressSchema },
+      { name: User.name, schema: UserSchema },
     ]),
-    // MongooseModule.forFeature([{ name: Order.name, schema: OrderSchema }]),
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

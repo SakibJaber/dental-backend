@@ -10,6 +10,8 @@ import { Order } from 'src/modules/order/order.schema';
 import { OrderStatus } from 'src/common/enum/order_status.enum';
 import { Address } from 'src/modules/address/address.schema';
 import { Cart } from 'src/modules/cart/cart.schema';
+import { NotificationService } from 'src/modules/notification/notification.service';
+import { User } from 'src/modules/users/schema/user.schema';
 
 @Injectable()
 export class OrdersService {
@@ -17,6 +19,8 @@ export class OrdersService {
     @InjectModel(Order.name) private readonly orderModel: Model<Order>,
     @InjectModel(Address.name) private readonly addressModel: Model<Address>,
     @InjectModel(Cart.name) private readonly cartModel: Model<Cart>,
+    @InjectModel(User.name) private readonly userModel: Model<User>, // for admin lookup
+    private readonly notificationService: NotificationService,
   ) {}
 
   async create(userId: string, dto: CreateOrderDto) {
@@ -38,7 +42,30 @@ export class OrdersService {
       status: OrderStatus.Pending,
     });
     await this.cartModel.deleteOne({ user: userId }); // clear cart after order
-    return order.save();
+    const savedOrder = await order.save();
+
+    // Notify user
+    await this.notificationService.createNotification({
+      title: 'Order Placed',
+      body: `Your order has been placed successfully. Order ID: ${savedOrder._id}`,
+      user: userId,
+      metadata: { orderId: savedOrder._id, status: OrderStatus.Pending },
+    });
+
+    // Notify all admins
+    const admins = await this.userModel.find({ role: 'admin' }).exec();
+    await Promise.all(
+      admins.map((admin) =>
+        this.notificationService.createNotification({
+          title: 'New Order Placed',
+          body: `A new order (${savedOrder._id}) was placed by user (${userId}).`,
+          user: admin.id.toString(),
+          metadata: { orderId: savedOrder._id, userId },
+        }),
+      ),
+    );
+
+    return savedOrder;
   }
 
   async findAll(page = 1, limit = 10, search?: string, status?: string) {
@@ -111,6 +138,14 @@ export class OrdersService {
       .populate('products.product', 'name')
       .populate('address');
     if (!order) throw new NotFoundException('Order not found');
+
+    // Notify user of status update
+    await this.notificationService.createNotification({
+      title: 'Order Status Updated',
+      body: `Your order (${order._id}) status is now "${status}".`,
+      user: order.user.toString(),
+      metadata: { orderId: order._id, newStatus: status },
+    });
     return order;
   }
 }
