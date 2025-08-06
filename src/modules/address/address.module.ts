@@ -12,6 +12,6 @@ import { UsersModule } from 'src/modules/users/users.module';
   ],
   controllers: [AddressController],
   providers: [AddressService],
-  exports: [AddressService],
+  exports: [AddressService,MongooseModule],
 })
 export class AddressModule {}

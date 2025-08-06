@@ -1,9 +1,18 @@
-import { Controller, Post, Body, Delete, Get, Patch, Param, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Delete,
+  Get,
+  Patch,
+  Param,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { CartService } from './cart.service';
 import { JwtAuthGuard } from 'src/common/guard/jwt-auth.guard';
-import { AddToCartDto } from 'src/modules/cart/dto/create-cart.dto';
+import { AddToCartDto } from './dto/create-cart.dto';
 import { UpdateCartItemDto } from 'src/modules/cart/dto/update-cart.dto';
-
 
 @Controller('cart')
 @UseGuards(JwtAuthGuard)
@@ -14,7 +23,11 @@ export class CartController {
   async addToCart(@Req() req, @Body() addToCartDto: AddToCartDto) {
     const userId = req.user.userId;
     const cart = await this.cartService.addToCart(userId, addToCartDto);
-    return { statusCode: 200, data: cart };
+    return {
+      statusCode: 200,
+      message: 'Product added to cart',
+      data: cart,
+    };
   }
 
   @Get()
@@ -36,20 +49,31 @@ export class CartController {
       productId,
       updateCartItemDto.quantity,
     );
-    return { statusCode: 200, data: cart };
+    return {
+      statusCode: 200,
+      message: 'Cart updated',
+      data: cart,
+    };
   }
 
   @Delete('item/:productId')
   async removeCartItem(@Req() req, @Param('productId') productId: string) {
     const userId = req.user.userId;
     const cart = await this.cartService.removeCartItem(userId, productId);
-    return { statusCode: 200, data: cart };
+    return {
+      statusCode: 200,
+      message: 'Product removed from cart',
+      data: cart,
+    };
   }
 
   @Delete('clear')
   async clearCart(@Req() req) {
     const userId = req.user.userId;
     await this.cartService.clearCart(userId);
-    return { statusCode: 200, message: 'Cart cleared' };
+    return {
+      statusCode: 200,
+      message: 'Cart cleared successfully',
+    };
   }
 }

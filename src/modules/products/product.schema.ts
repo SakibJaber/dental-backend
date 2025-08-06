@@ -13,6 +13,9 @@ export class Product extends Document {
   @Prop({ required: true })
   price: number;
 
+  @Prop({ default: 0 })
+  stock: number;
+
   @Prop({ type: Types.ObjectId, ref: 'Category', required: true })
   category: Types.ObjectId;
 
@@ -28,6 +31,7 @@ export class Product extends Document {
   @Prop({
     required: true,
     enum: Object.values(ProductAvailability),
+    default: ProductAvailability.IN_STOCK,
   })
   availability: ProductAvailability;
 

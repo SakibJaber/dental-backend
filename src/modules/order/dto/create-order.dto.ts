@@ -4,8 +4,10 @@ import {
   IsNumber,
   IsArray,
   ValidateNested,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { PaymentMethod } from 'src/common/enum/payment.enum';
 
 class OrderProductDto {
   @IsMongoId()
@@ -33,8 +35,8 @@ export class CreateOrderDto {
   @IsArray()
   products: OrderProductDto[];
 
-  @IsString()
-  paymentMethod: string;
+  @IsEnum(PaymentMethod)
+  paymentMethod: PaymentMethod;
 
   @IsNumber()
   subtotal: number;
@@ -44,4 +46,7 @@ export class CreateOrderDto {
 
   @IsNumber()
   total: number;
+
+  @IsString()
+  idempotencyKey: string;
 }
