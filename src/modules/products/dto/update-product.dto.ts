@@ -46,4 +46,8 @@ export class UpdateProductDto {
   @IsBoolean()
   @IsOptional()
   isFeatured?: boolean;
+
+  @IsString()
+  @IsOptional()
+  slug?: string;
 }

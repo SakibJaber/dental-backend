@@ -110,6 +110,16 @@ export class ProductsController {
     };
   }
 
+  @Get(':slug')
+  async findbySlug(@Param('slug') slug: string) {
+    const product = await this.productsService.findOneBySlug(slug); // Find product by slug
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Product fetched successfully',
+      data: product,
+    };
+  }
+
   @Patch(':id')
   @UseGlobalFileInterceptor({ fieldName: 'images', maxCount: 5 })
   async update(

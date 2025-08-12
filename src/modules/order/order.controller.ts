@@ -62,7 +62,7 @@ export class OrdersController {
 
     // Handle Stripe payment
     if (createOrderDto.paymentMethod === PaymentMethod.STRIPE) {
-      const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+      const frontendUrl = this.configService.get<string>('BASE_URL');
       const successUrl = `${frontendUrl}/checkout/success?orderId=${order._id}`;
       const cancelUrl = `${frontendUrl}/checkout/cancel?orderId=${order._id}`;
 
@@ -193,7 +193,7 @@ export class OrdersController {
       throw new ConflictException('Payment already succeeded');
     }
 
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    const frontendUrl = this.configService.get<string>('BASE_URL');
     const successUrl = `${frontendUrl}/checkout/success?orderId=${order._id}`;
     const cancelUrl = `${frontendUrl}/checkout/cancel?orderId=${order._id}`;
 

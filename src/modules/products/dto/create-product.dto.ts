@@ -47,4 +47,8 @@ export class CreateProductDto {
   @IsBoolean()
   @IsOptional()
   isFeatured?: boolean = false;
+
+  @IsString()
+  @IsOptional()
+  slug?: string;
 }

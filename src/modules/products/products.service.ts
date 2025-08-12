@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import slugify from 'slugify';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from 'src/modules/products/product.schema';
@@ -36,9 +37,13 @@ export class ProductsService {
         files.map((file) => this.fileUploadService.handleUpload(file)),
       );
 
+      // Generate the slug using the `generateSlug` method
+      const slug = this.generateSlug(createProductDto.name);
+
       const createdProduct = new this.productModel({
         ...createProductDto,
         imageUrl,
+        slug, // Store the generated slug
       });
 
       return createdProduct.save();
@@ -139,12 +144,17 @@ export class ProductsService {
       );
     }
 
+    const slug = this.generateSlug(
+      updateProductDto.name || existingProduct.name,
+    ); // Generate new slug
+
     const updatedProduct = await this.productModel
       .findByIdAndUpdate(
         id,
         {
           ...updateProductDto,
           imageUrl: newImageUrls,
+          slug, // Save the updated slug
         },
         { new: true },
       )
@@ -160,6 +170,30 @@ export class ProductsService {
       });
     }
     return updatedProduct;
+  }
+
+  // Utility function to generate a slug from a string
+  private generateSlug(name: string): string {
+    const baseUrl = 'https://example.com/products/'; // Base URL for your products
+    const productSlug = slugify(name, { lower: true, strict: true }); // Convert name to slug-friendly format
+    return `${baseUrl}${productSlug}`; // Concatenate base URL with the slug
+  }
+
+  async findOneBySlug(slug: string): Promise<Product> {
+    const product = await this.productModel
+      .findOne({ slug: slug.toLowerCase() }) // Ensure slug query is case-insensitive
+      .populate('category', 'name')
+      .populate('brand', 'name')
+      .populate('procedure', 'name')
+      .exec();
+
+    if (!product) {
+      throw new NotFoundException({
+        statusCode: HttpStatus.NOT_FOUND,
+        message: `Product with slug ${slug} not found`,
+      });
+    }
+    return product;
   }
 
   async getHotProducts(
