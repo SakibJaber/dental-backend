@@ -49,5 +49,5 @@ export class UpdateProductDto {
 
   @IsString()
   @IsOptional()
-  slug?: string;
+  productUrl?: string;
 }

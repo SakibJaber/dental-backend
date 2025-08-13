@@ -10,7 +10,6 @@ import {
   UploadedFiles,
   HttpStatus,
   DefaultValuePipe,
-  ParseBoolPipe,
   ParseIntPipe,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
@@ -88,7 +87,6 @@ export class ProductsController {
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('sortBy') sortBy?: 'sales' | 'views' | 'featured',
   ) {
-    // You can add more sorting options as needed
     const hotProducts = await this.productsService.getHotProducts(
       limit,
       sortBy,
@@ -100,19 +98,9 @@ export class ProductsController {
     };
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    const product = await this.productsService.findOne(id);
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'Product fetched successfully',
-      data: product,
-    };
-  }
-
-  @Get(':slug')
-  async findbySlug(@Param('slug') slug: string) {
-    const product = await this.productsService.findOneBySlug(slug); // Find product by slug
+  @Get(':identifier')
+  async findOne(@Param('identifier') identifier: string) {
+    const product = await this.productsService.findOne(identifier);
     return {
       statusCode: HttpStatus.OK,
       message: 'Product fetched successfully',
@@ -145,6 +133,17 @@ export class ProductsController {
     return {
       statusCode: HttpStatus.OK,
       message: 'Product deleted successfully',
+    };
+  }
+
+  @Patch('update-urls')
+  async bulkUpdateUrls(
+    @Body() body: { updates: Array<{ _id: string; productUrl: string }> },
+  ) {
+    await this.productsService.bulkUpdateProductUrls(body.updates);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Product URLs updated successfully',
     };
   }
 }

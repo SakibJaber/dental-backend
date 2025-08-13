@@ -50,5 +50,5 @@ export class CreateProductDto {
 
   @IsString()
   @IsOptional()
-  slug?: string;
+  productUrl?: string;
 }

@@ -6,8 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import slugify from 'slugify';
+import { Model, Types } from 'mongoose';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from 'src/modules/products/product.schema';
@@ -37,16 +36,12 @@ export class ProductsService {
         files.map((file) => this.fileUploadService.handleUpload(file)),
       );
 
-      // Generate the slug using the `generateSlug` method
-      const slug = this.generateSlug(createProductDto.name);
-
-      const createdProduct = new this.productModel({
+      const newProduct = new this.productModel({
         ...createProductDto,
         imageUrl,
-        slug, // Store the generated slug
       });
 
-      return createdProduct.save();
+      return newProduct.save();
     } catch (error) {
       throw new InternalServerErrorException({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
@@ -107,8 +102,27 @@ export class ProductsService {
   }
 
   async findOne(id: string): Promise<Product> {
+    if (Types.ObjectId.isValid(id)) {
+      const product = await this.productModel
+        .findById(id)
+        .populate('category', 'name')
+        .populate('brand', 'name')
+        .populate('procedure', 'name')
+        .exec();
+
+      if (!product) {
+        throw new NotFoundException({
+          statusCode: HttpStatus.NOT_FOUND,
+          message: `Product with ID ${id} not found`,
+        });
+      }
+      return product;
+    }
+
+    // Lookup by product URL
+    const decodedUrl = decodeURIComponent(id);
     const product = await this.productModel
-      .findById(id)
+      .findOne({ productUrl: decodedUrl })
       .populate('category', 'name')
       .populate('brand', 'name')
       .populate('procedure', 'name')
@@ -117,7 +131,7 @@ export class ProductsService {
     if (!product) {
       throw new NotFoundException({
         statusCode: HttpStatus.NOT_FOUND,
-        message: `Product with ID ${id} not found`,
+        message: `Product with URL ${decodedUrl} not found`,
       });
     }
     return product;
@@ -144,17 +158,12 @@ export class ProductsService {
       );
     }
 
-    const slug = this.generateSlug(
-      updateProductDto.name || existingProduct.name,
-    ); // Generate new slug
-
     const updatedProduct = await this.productModel
       .findByIdAndUpdate(
         id,
         {
           ...updateProductDto,
           imageUrl: newImageUrls,
-          slug, // Save the updated slug
         },
         { new: true },
       )
@@ -172,28 +181,18 @@ export class ProductsService {
     return updatedProduct;
   }
 
-  // Utility function to generate a slug from a string
-  private generateSlug(name: string): string {
-    const baseUrl = 'https://example.com/products/'; // Base URL for your products
-    const productSlug = slugify(name, { lower: true, strict: true }); // Convert name to slug-friendly format
-    return `${baseUrl}${productSlug}`; // Concatenate base URL with the slug
-  }
+  async bulkUpdateProductUrls(
+    updates: Array<{ _id: string; productUrl: string }>,
+  ): Promise<boolean> {
+    const bulkOps = updates.map((update) => ({
+      updateOne: {
+        filter: { _id: new Types.ObjectId(update._id) },
+        update: { $set: { productUrl: update.productUrl } },
+      },
+    }));
 
-  async findOneBySlug(slug: string): Promise<Product> {
-    const product = await this.productModel
-      .findOne({ slug: slug.toLowerCase() }) // Ensure slug query is case-insensitive
-      .populate('category', 'name')
-      .populate('brand', 'name')
-      .populate('procedure', 'name')
-      .exec();
-
-    if (!product) {
-      throw new NotFoundException({
-        statusCode: HttpStatus.NOT_FOUND,
-        message: `Product with slug ${slug} not found`,
-      });
-    }
-    return product;
+    await this.productModel.bulkWrite(bulkOps);
+    return true;
   }
 
   async getHotProducts(
