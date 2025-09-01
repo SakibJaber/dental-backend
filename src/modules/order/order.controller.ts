@@ -44,20 +44,37 @@ export class OrdersController {
   async placeOrder(
     @Req() req,
     @Body() createOrderDto: CreateOrderDto,
-    @Headers('Idempotency-Key') idempotencyKey: string,
+    @Headers('Idempotency-Key') headerKey: string,
   ) {
     const userId = req.user.userId;
 
-    // Generate idempotency key if not provided
-    if (!idempotencyKey) {
-      idempotencyKey = uuidv4();
-    }
+    // Prioritize header > body > generate
+    const idempotencyKey =
+      headerKey || createOrderDto.idempotencyKey || uuidv4();
     createOrderDto.idempotencyKey = idempotencyKey;
 
-    // Validate cart contents
+    // Validate and get cart contents
     const cart = await this.cartService.validateCartForCheckout(userId);
 
-    // Create order
+    // Override DTO products with validated cart items for security
+    createOrderDto.products = cart.items.map((item) => ({
+      product: item.product._id.toString(),
+      name: item.product.name,
+      price: item.product.price,
+      quantity: item.quantity,
+      image: Array.isArray(item.product.imageUrl)
+        ? item.product.imageUrl[0]
+        : item.product.imageUrl,
+    }));
+
+    // Recalculate totals server-side based on cart
+    createOrderDto.subtotal = cart.items.reduce(
+      (sum, item) => sum + item.product.price * item.quantity,
+      0,
+    );
+    createOrderDto.total = createOrderDto.subtotal;
+
+    // Create order (validation already done here)
     const order = await this.ordersService.create(userId, createOrderDto);
 
     // Handle Stripe payment
@@ -106,9 +123,8 @@ export class OrdersController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('search') search?: string,
-    @Query('status') status?: string, // Keep as string for validation
+    @Query('status') status?: string,
   ) {
-    // Validate and convert status parameter
     let orderStatus: OrderStatus | undefined;
     if (status) {
       if (!Object.values(OrderStatus).includes(status as OrderStatus)) {
@@ -180,6 +196,10 @@ export class OrdersController {
   async retryPayment(@Req() req, @Param('id') orderId: string) {
     const userId = req.user.userId;
     const order = await this.ordersService.findOne(orderId);
+
+    const ownerId =
+      (order.user as any)?._id?.toString?.() ?? order.user.toString();
+    if (ownerId !== userId) throw new NotFoundException('Order not found');
 
     if (order.user.toString() !== userId) {
       throw new NotFoundException('Order not found');

@@ -45,7 +45,7 @@ export class OrderService {
     if (!address) throw new BadRequestException('Invalid address');
 
     // Validate products and stock
-    await this.validateProducts(dto.products);
+    await this.validateProducts(dto.products ?? []);
 
     // Create order
     const order = new this.orderModel({
@@ -58,7 +58,6 @@ export class OrderService {
           ? PaymentStatus.SUCCEEDED
           : PaymentStatus.PENDING,
       subtotal: dto.subtotal,
-      shippingFee: dto.shippingFee,
       total: dto.total,
       status: OrderStatus.PENDING,
       idempotencyKey: dto.idempotencyKey,
@@ -67,7 +66,7 @@ export class OrderService {
     const savedOrder = await order.save();
 
     // Update product stock
-    await this.updateProductStock(dto.products, 'decrement');
+    await this.updateProductStock(dto.products ?? [], 'decrement');
 
     // Clear cart
     await this.clearUserCart(userId);
@@ -147,6 +146,13 @@ export class OrderService {
     const query: any = {};
     if (status) query.status = status;
     if (userId) query.user = new Types.ObjectId(userId);
+    if (search) {
+      // Basic search implementation (e.g., by order ID or user name; expand as needed)
+      query.$or = [
+        { _id: search },
+        { 'user.name': { $regex: search, $options: 'i' } },
+      ];
+    }
 
     const skip = (page - 1) * limit;
     const [orders, total] = await Promise.all([
@@ -199,12 +205,14 @@ export class OrderService {
       .populate('user', 'name');
 
     if (!order) throw new NotFoundException('Order not found');
+    const userIdStr =
+      (order.user as any)?._id?.toString?.() ?? order.user.toString();
 
     // Notify user of status update
     await this.notificationService.createNotification({
       title: 'Order Status Updated',
       body: `Your order #${order._id} is now "${updateOrderStatusDto.status}"`,
-      user: order.user.toString(),
+      user: userIdStr,
       metadata: {
         orderId: order._id,
         newStatus: updateOrderStatusDto.status,

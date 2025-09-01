@@ -1,3 +1,4 @@
+// CreateOrderDto
 import {
   IsMongoId,
   IsString,
@@ -5,8 +6,9 @@ import {
   IsArray,
   ValidateNested,
   IsEnum,
+  IsOptional,
+  Min,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 import { PaymentMethod } from 'src/common/enum/payment.enum';
 
 class OrderProductDto {
@@ -20,6 +22,7 @@ class OrderProductDto {
   price: number;
 
   @IsNumber()
+  @Min(1)
   quantity: number;
 
   @IsString()
@@ -31,22 +34,23 @@ export class CreateOrderDto {
   addressId: string;
 
   @ValidateNested({ each: true })
-  @Type(() => OrderProductDto)
   @IsArray()
-  products: OrderProductDto[];
+  @IsOptional()
+  products?: OrderProductDto[];
 
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
 
+  // Server-calculated
   @IsNumber()
-  subtotal: number;
+  @IsOptional()
+  subtotal?: number;
 
   @IsNumber()
-  shippingFee: number;
-
-  @IsNumber()
-  total: number;
+  @IsOptional()
+  total?: number;
 
   @IsString()
-  idempotencyKey: string;
+  @IsOptional()
+  idempotencyKey?: string;
 }

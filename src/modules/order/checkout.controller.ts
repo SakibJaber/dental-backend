@@ -12,15 +12,15 @@ export class CheckoutController {
   async success(@Req() req, @Query('orderId') orderId: string) {
     const userId = req.user.userId;
     const order = await this.ordersService.findOne(orderId);
-    
+
     if (order.user.toString() !== userId) {
       throw new NotFoundException('Order not found');
     }
 
-    return { 
-      statusCode: 200, 
+    return {
+      statusCode: 200,
       message: 'Payment succeeded!',
-      data: order 
+      data: order,
     };
   }
 
@@ -29,15 +29,15 @@ export class CheckoutController {
   async cancel(@Req() req, @Query('orderId') orderId: string) {
     const userId = req.user.userId;
     const order = await this.ordersService.findOne(orderId);
-    
+
     if (order.user.toString() !== userId) {
       throw new NotFoundException('Order not found');
     }
 
-    return { 
-      statusCode: 200, 
+    return {
+      statusCode: 200,
       message: 'Payment was canceled.',
-      data: order 
+      data: order,
     };
   }
 }

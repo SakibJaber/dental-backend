@@ -40,8 +40,8 @@ export class Order extends Document {
   @Prop({ required: true })
   subtotal: number;
 
-  @Prop({ required: true })
-  shippingFee: number;
+  // @Prop({ required: true })
+  // shippingFee: number;
 
   @Prop({ required: true })
   total: number;

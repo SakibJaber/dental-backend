@@ -25,9 +25,9 @@ export class StripeService {
     cancelUrl: string;
   }) {
     try {
-      const lineItems = params.products.map(item => ({
+      const lineItems = params.products.map((item) => ({
         price_data: {
-          currency: 'usd',
+          currency: 'usd', // Make configurable if needed
           product_data: { name: item.name },
           unit_amount: Math.round(item.price * 100),
         },

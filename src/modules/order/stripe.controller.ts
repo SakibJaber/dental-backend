@@ -41,6 +41,9 @@ export class StripeWebhookController {
         case 'checkout.session.completed':
           await this.handleCheckoutSessionCompleted(event.data.object);
           break;
+        case 'checkout.session.expired':
+          await this.handleCheckoutSessionExpired(event.data.object);
+          break;
         case 'payment_intent.succeeded':
           await this.handlePaymentIntentSucceeded(event.data.object);
           break;
@@ -73,6 +76,17 @@ export class StripeWebhookController {
       );
       this.logger.log(`Payment succeeded for order ${orderId}`);
     }
+  }
+
+  private async handleCheckoutSessionExpired(session: Stripe.Checkout.Session) {
+    const orderId = session.client_reference_id || session.metadata?.orderId;
+    if (!orderId) {
+      this.logger.warn('Missing order ID in expired Stripe session');
+      return;
+    }
+    // Cancel order and restore stock
+    await this.ordersService.updatePaymentStatus(orderId, PaymentStatus.FAILED);
+    this.logger.log(`Session expired for order ${orderId}; order cancelled and stock restored`);
   }
 
   private async handlePaymentIntentSucceeded(

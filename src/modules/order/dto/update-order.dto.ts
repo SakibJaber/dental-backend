@@ -1,8 +1,8 @@
-import { IsString } from 'class-validator';
+import { IsEnum, IsString } from 'class-validator';
 import { OrderStatus } from 'src/common/enum/order_status.enum';
 
 export class UpdateOrderStatusDto {
-  @IsString()
+  @IsEnum(OrderStatus)
   status: OrderStatus;
 
   @IsString()
