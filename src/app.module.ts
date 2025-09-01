@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import * as path from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DomainModule } from 'src/modules/domain.module';
@@ -11,6 +13,11 @@ import { AllExceptionsFilter } from 'src/common/filters/all-exception.filter';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+        ServeStaticModule.forRoot({
+      rootPath: path.resolve(process.cwd(), 'public'),
+      serveRoot: '/', // so /uploads/* maps to public/uploads/*
+      exclude: ['/api*'],
+    }),
     MongooseDatabaseModule,
     FileUploadModule,
     DomainModule,

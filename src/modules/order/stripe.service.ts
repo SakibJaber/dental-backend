@@ -12,7 +12,7 @@ export class StripeService {
       throw new InternalServerErrorException('STRIPE_SECRET_KEY is not set');
     }
     this.stripe = new Stripe(stripeKey, {
-      apiVersion: '2025-07-30.basil',
+      apiVersion: '2025-08-27.basil',
       typescript: true,
     });
   }
