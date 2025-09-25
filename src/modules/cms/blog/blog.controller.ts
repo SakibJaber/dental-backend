@@ -11,17 +11,24 @@ import {
   HttpStatus,
   DefaultValuePipe,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { CreateBlogDto } from './dto/create-blog.dto';
 import { UpdateBlogDto } from './dto/update-blog.dto';
 import { UseGlobalFileInterceptor } from 'src/common/decorator/globalFileInterceptor.decorator';
 import { BlogService } from 'src/modules/cms/blog/blog.service';
+import { Roles } from 'src/common/decorator/roles.decorator';
+import { Role } from 'src/common/enum/user_role.enum';
+import { JwtAuthGuard } from 'src/common/guard/jwt-auth.guard';
+import { RolesGuard } from 'src/common/guard/roles.guard';
 
 @Controller('blogs')
 export class BlogController {
   constructor(private readonly blogsService: BlogService) {}
 
   @Post()
+  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @UseGlobalFileInterceptor({ fieldName: 'images', maxCount: 5 })
   async create(
     @Body() createBlogDto: CreateBlogDto,
@@ -73,6 +80,8 @@ export class BlogController {
   }
 
   @Patch(':id')
+  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @UseGlobalFileInterceptor({ fieldName: 'images', maxCount: 5 })
   async update(
     @Param('id') id: string,
@@ -88,6 +97,8 @@ export class BlogController {
   }
 
   @Delete(':id')
+  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   async remove(@Param('id') id: string) {
     await this.blogsService.remove(id);
     return {

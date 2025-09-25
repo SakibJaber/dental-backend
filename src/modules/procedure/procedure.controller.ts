@@ -8,17 +8,24 @@ import {
   Delete,
   UploadedFile,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { ProceduresService } from './procedure.service';
 import { CreateProcedureDto } from './dto/create-procedure.dto';
 import { UpdateProcedureDto } from './dto/update-procedure.dto';
 import { UseGlobalFileInterceptor } from '../../common/decorator/globalFileInterceptor.decorator';
+import { Roles } from 'src/common/decorator/roles.decorator';
+import { Role } from 'src/common/enum/user_role.enum';
+import { JwtAuthGuard } from 'src/common/guard/jwt-auth.guard';
+import { RolesGuard } from 'src/common/guard/roles.guard';
 
 @Controller('procedures')
 export class ProceduresController {
   constructor(private readonly proceduresService: ProceduresService) {}
 
   @Post()
+  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @UseGlobalFileInterceptor({ fieldName: 'image' })
   async create(
     @Body() dto: CreateProcedureDto,
@@ -53,6 +60,8 @@ export class ProceduresController {
   }
 
   @Patch(':id')
+  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @UseGlobalFileInterceptor({ fieldName: 'image' })
   async update(
     @Param('id') id: string,
@@ -68,6 +77,8 @@ export class ProceduresController {
   }
 
   @Delete(':id')
+  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   async remove(@Param('id') id: string) {
     await this.proceduresService.remove(id);
     return {
