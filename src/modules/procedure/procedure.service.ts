@@ -10,7 +10,7 @@ import { Procedure } from './procedure.schema';
 import { CreateProcedureDto } from './dto/create-procedure.dto';
 import { UpdateProcedureDto } from './dto/update-procedure.dto';
 import { FileUploadService } from '../file-upload/file-upload.service';
-import { Product } from 'src/modules/products/product.schema';
+import { Product } from 'src/modules/products/schema/product.schema';
 
 @Injectable()
 export class ProceduresService {

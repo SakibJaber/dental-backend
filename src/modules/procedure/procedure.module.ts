@@ -4,7 +4,10 @@ import { Procedure, ProcedureSchema } from './procedure.schema';
 import { FileUploadModule } from '../file-upload/file-upload.module';
 import { ProceduresController } from 'src/modules/procedure/procedure.controller';
 import { ProceduresService } from 'src/modules/procedure/procedure.service';
-import { Product, ProductSchema } from 'src/modules/products/product.schema';
+import {
+  Product,
+  ProductSchema,
+} from 'src/modules/products/schema/product.schema';
 
 @Module({
   imports: [

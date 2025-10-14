@@ -8,7 +8,7 @@ import { Model, Types } from 'mongoose';
 import { Cart } from './cart.schema';
 import { AddToCartDto } from './dto/create-cart.dto';
 import { ProductAvailability } from 'src/common/enum/product-availability.enum';
-import { Product } from 'src/modules/products/product.schema';
+import { Product } from 'src/modules/products/schema/product.schema';
 import PopulatedProduct from 'src/common/interface/populate-product.interface';
 
 @Injectable()

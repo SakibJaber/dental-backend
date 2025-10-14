@@ -21,9 +21,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private getUploadedFiles(request: Request): Express.Multer.File[] {
     if (request.file) return [request.file];
     if (request.files) {
-      return Array.isArray(request.files) 
-        ? request.files 
-        : Object.values(request.files).flat();
+      return Array.isArray(request.files)
+        ? request.files as Express.Multer.File[]
+        : (Object.values(request.files).flat() as Express.Multer.File[]);
     }
     return [];
   }

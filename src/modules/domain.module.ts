@@ -15,6 +15,7 @@ import { NotificationModule } from './notification/notification.module';
 import { OrderModule } from './order/order.module';
 import { CartModule } from './cart/cart.module';
 import { GlobalSearchModule } from './global-search/global-search.module';
+import { FavouritesModule } from './favourites/favourites.module';
 
 @Module({
   imports: [
@@ -33,7 +34,8 @@ import { GlobalSearchModule } from './global-search/global-search.module';
     NotificationModule,
     OrderModule,
     CartModule,
-    GlobalSearchModule
+    GlobalSearchModule,
+    FavouritesModule
   ],
   controllers: [],
   providers: [],

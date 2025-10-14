@@ -1,0 +1,101 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, Types } from 'mongoose';
+import { ProductAvailability } from 'src/common/enum/product-availability.enum';
+
+export type ProductDocument = Product & Document;
+
+@Schema({ timestamps: true })
+export class Product {
+  @Prop({
+    required: true,
+    trim: true,
+    maxlength: 200,
+  })
+  name: string;
+
+  @Prop({
+    type: String,
+    trim: true,
+    maxlength: 500,
+    default: '',
+  })
+  productId: string;
+
+  @Prop({
+    trim: true,
+    maxlength: 2000,
+  })
+  description: string;
+
+  @Prop({
+    required: true,
+    min: 0,
+  })
+  price: number;
+
+  @Prop({
+    default: 0,
+    min: 0,
+  })
+  stock: number;
+
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'Category',
+    required: true,
+  })
+  category: Types.ObjectId;
+
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'Brand',
+    required: true,
+  })
+  brand: Types.ObjectId;
+
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'Procedure',
+    required: true,
+  })
+  procedure: Types.ObjectId;
+
+  @Prop({ type: [String], default: [] })
+  images: string[];
+
+  @Prop({
+    required: true,
+    enum: Object.values(ProductAvailability),
+    default: ProductAvailability.IN_STOCK,
+  })
+  availability: ProductAvailability;
+
+  @Prop({ default: 0 })
+  salesCount: number;
+
+  @Prop({ default: 0 })
+  views: number;
+
+  @Prop({ default: false })
+  isFeatured: boolean;
+
+  // Add the new productUrl field
+  @Prop({
+    type: String,
+    trim: true,
+    maxlength: 500,
+    default: '',
+  })
+  productUrl: string;
+}
+
+export const ProductSchema = SchemaFactory.createForClass(Product);
+
+// Compound indexes for better query performance
+ProductSchema.index({ category: 1, availability: 1 });
+ProductSchema.index({ brand: 1, availability: 1 });
+ProductSchema.index({ procedure: 1, availability: 1 });
+ProductSchema.index({ isFeatured: 1, availability: 1 });
+ProductSchema.index({ price: 1, availability: 1 });
+ProductSchema.index({ createdAt: -1 });
+ProductSchema.index({ name: 'text', description: 'text' });

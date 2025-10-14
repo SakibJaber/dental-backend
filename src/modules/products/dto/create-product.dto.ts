@@ -1,16 +1,22 @@
 import {
-  IsArray,
-  IsBoolean,
-  IsEnum,
-  IsMongoId,
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
   IsString,
+  IsNumber,
+  IsArray,
+  IsEnum,
+  IsBoolean,
+  IsOptional,
+  IsMongoId,
+  Min,
+  IsNotEmpty,
+  IsUrl,
 } from 'class-validator';
 import { ProductAvailability } from 'src/common/enum/product-availability.enum';
 
 export class CreateProductDto {
+  @IsString()
+  @IsOptional()
+  productId?: string;
+
   @IsString()
   @IsNotEmpty()
   name: string;
@@ -20,8 +26,13 @@ export class CreateProductDto {
   description?: string;
 
   @IsNumber()
-  @IsNotEmpty()
+  @Min(0)
   price: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  stock?: number;
 
   @IsMongoId()
   @IsNotEmpty()
@@ -37,16 +48,25 @@ export class CreateProductDto {
 
   @IsArray()
   @IsOptional()
-  @IsString({ each: true })
-  imageUrl?: string[];
+  images?: string[];
 
   @IsEnum(ProductAvailability)
-  @IsNotEmpty()
-  availability: ProductAvailability;
+  @IsOptional()
+  availability?: ProductAvailability;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  salesCount?: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  views?: number;
 
   @IsBoolean()
   @IsOptional()
-  isFeatured?: boolean = false;
+  isFeatured?: boolean;
 
   @IsString()
   @IsOptional()

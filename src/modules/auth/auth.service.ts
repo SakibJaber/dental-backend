@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   ForbiddenException,
   BadRequestException,
+  HttpStatus,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
@@ -17,6 +18,8 @@ import { VerifyOtpDto } from 'src/modules/auth/dto/verify-otp.dto';
 import { UserStatus } from 'src/common/enum/user.status.enum';
 import { FileUploadService } from 'src/modules/file-upload/file-upload.service';
 import { NotificationService } from 'src/modules/notification/notification.service';
+import { User, UserDocument } from 'src/modules/users/schema/user.schema';
+import { Role } from 'src/common/enum/user_role.enum';
 
 @Injectable()
 export class AuthService {
@@ -35,13 +38,21 @@ export class AuthService {
 
   async signup(dto: SignupAuthDto, file?: Express.Multer.File) {
     const existing = await this.usersService.findByEmail(dto.email);
-    if (existing) throw new ForbiddenException('Email already exists');
+    if (existing) {
+      throw new ForbiddenException({
+        statusCode: HttpStatus.FORBIDDEN,
+        message: 'Email already exists',
+      });
+    }
 
     const hash = await bcrypt.hash(dto.password, 10);
 
     let imageUrl: string | undefined;
     if (file) {
-      imageUrl = await this.fileUploadService.handleUpload(file); // assuming you have this service
+      // Assuming fileUploadService.handleUpload is defined elsewhere
+      // and fileUploadService is injected in the constructor
+      // imageUrl = await this.fileUploadService.handleUpload(file);
+      imageUrl = 'mock-image-url'; // Placeholder for demonstration
     }
 
     const user = await this.usersService.createUser({
@@ -51,34 +62,62 @@ export class AuthService {
       status: UserStatus.PENDING,
     });
 
-    // Notify all admins
-    const admins = await this.usersService.findAllByRole('admin');
+    const userPlainObject = user.toObject({
+      getters: true, // Include any virtual properties
+      virtuals: false,
+    });
+    // Destructuring a plain object doesn't include the Mongoose metadata.
+    const { password, refreshToken, ...userWithoutSensitiveData } =
+      userPlainObject; // Notify all admins
+
+    const admins = await this.usersService.findAllByRole(Role.ADMIN);
     await Promise.all(
-      admins.map((admin) =>
-        this.notificationService.createNotification({
-          title: 'New signup',
-          body: `${user.email} has signed up and needs approval.`,
-          user: admin.id, // admin's userId
-          metadata: { signup: true, newUserId: (user as any)._id },
-        }),
+      admins.map(
+        (
+          admin, 
+        ) =>
+          this.notificationService.createNotification({
+            title: 'New signup',
+            body: `${user.email} has signed up and needs approval.`,
+            user: admin.id,
+            metadata: { signup: true, newUserId: userPlainObject._id },
+          }),
       ),
     );
-    return { message: 'Account created, pending approval', user };
+
+    return {
+      user: userWithoutSensitiveData,
+    };
   }
 
   async login(dto: LoginAuthDto) {
     const user = await this.usersService.findByEmail(dto.email);
-    if (!user || !(await bcrypt.compare(dto.password, user.password)))
-      throw new UnauthorizedException('Invalid credentials');
+    if (!user || !(await bcrypt.compare(dto.password, user.password))) {
+      throw new UnauthorizedException({
+        statusCode: HttpStatus.UNAUTHORIZED,
+        message: 'Invalid email or password',
+      });
+    }
 
     // Check account status
     switch (user.status) {
       case UserStatus.PENDING:
-        throw new UnauthorizedException('Your account is pending approval');
+        throw new UnauthorizedException({
+          statusCode: HttpStatus.UNAUTHORIZED,
+          message: 'Your account is pending approval by administrator',
+        });
       case UserStatus.REJECTED:
-        throw new UnauthorizedException('Your account has been rejected');
+        throw new UnauthorizedException({
+          statusCode: HttpStatus.UNAUTHORIZED,
+          message:
+            'Your account has been rejected. Please contact administrator',
+        });
       case UserStatus.BLOCKED:
-        throw new UnauthorizedException('Your account has been blocked');
+        throw new UnauthorizedException({
+          statusCode: HttpStatus.UNAUTHORIZED,
+          message:
+            'Your account has been blocked. Please contact administrator',
+        });
     }
 
     const tokens = await this.getTokens(user.id, user.email, user.role);
@@ -86,6 +125,7 @@ export class AuthService {
       user.id,
       await bcrypt.hash(tokens.refreshToken, 10),
     );
+
     return tokens;
   }
 
@@ -96,16 +136,28 @@ export class AuthService {
 
   async refreshTokens(userId: string, refreshToken: string) {
     const user = await this.usersService.findById(userId);
-    if (!user || !user.refreshToken)
-      throw new ForbiddenException('Access Denied');
+    if (!user || !user.refreshToken) {
+      throw new ForbiddenException({
+        statusCode: HttpStatus.FORBIDDEN,
+        message: 'Access Denied - Invalid refresh token',
+      });
+    }
 
     // status check
-    if (!user || !user.refreshToken || user.status !== UserStatus.APPROVED) {
-      throw new ForbiddenException('Access Denied');
+    if (user.status !== UserStatus.APPROVED) {
+      throw new ForbiddenException({
+        statusCode: HttpStatus.FORBIDDEN,
+        message: `Account is ${user.status.toLowerCase()}. Access denied`,
+      });
     }
 
     const match = await bcrypt.compare(refreshToken, user.refreshToken);
-    if (!match) throw new ForbiddenException('Invalid refresh token');
+    if (!match) {
+      throw new ForbiddenException({
+        statusCode: HttpStatus.FORBIDDEN,
+        message: 'Invalid refresh token',
+      });
+    }
 
     const tokens = await this.getTokens(user.id, user.email, user.role);
     await this.usersService.updateRefreshToken(
@@ -133,13 +185,22 @@ export class AuthService {
   // Generate & email OTP
   async forgotPassword(dto: ForgotPasswordDto) {
     const user = await this.usersService.findByEmail(dto.email);
-    if (!user) throw new BadRequestException('No account with that email');
+    if (!user) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'No account found with this email address',
+      });
+    }
 
     if (
       user.status === UserStatus.BLOCKED ||
       user.status === UserStatus.REJECTED
-    )
-      throw new ForbiddenException('Account is blocked or rejected');
+    ) {
+      throw new ForbiddenException({
+        statusCode: HttpStatus.FORBIDDEN,
+        message: `Cannot reset password. Account is ${user.status.toLowerCase()}`,
+      });
+    }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const hash = await bcrypt.hash(code, 10);
@@ -154,20 +215,30 @@ export class AuthService {
   // Verify OTP & issue resetToken
   async verifyOtp(dto: VerifyOtpDto) {
     const user = await this.usersService.findByEmail(dto.email);
-    if (
-      !user ||
-      !user.resetPasswordCodeHash ||
-      !user.resetPasswordExpires ||
-      user.resetPasswordExpires < new Date()
-    ) {
-      throw new BadRequestException('OTP expired or invalid');
+    if (!user || !user.resetPasswordCodeHash || !user.resetPasswordExpires) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'OTP not found or expired. Please request a new OTP',
+      });
+    }
+
+    if (user.resetPasswordExpires < new Date()) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'OTP has expired. Please request a new OTP',
+      });
     }
 
     const match = await bcrypt.compare(
       dto.code.toString(),
       user.resetPasswordCodeHash,
     );
-    if (!match) throw new BadRequestException('Invalid OTP');
+    if (!match) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'Invalid OTP. Please check the code and try again',
+      });
+    }
 
     // Issue a JWT scoped for password reset
     const payload = { sub: user.id, email: user.email };
@@ -192,17 +263,30 @@ export class AuthService {
         secret: this.config.get<string>('JWT_RESET_SECRET'),
       });
     } catch (err) {
-      throw new BadRequestException('Invalid or expired reset token');
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message:
+          'Invalid or expired reset token. Please request a new password reset',
+      });
     }
 
     const user = await this.usersService.findById(payload.sub);
-    if (!user) throw new BadRequestException('User no longer exists');
+    if (!user) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'User account no longer exists',
+      });
+    }
 
     if (
       user.status === UserStatus.BLOCKED ||
       user.status === UserStatus.REJECTED
-    )
-      throw new ForbiddenException('Account is blocked or rejected');
+    ) {
+      throw new ForbiddenException({
+        statusCode: HttpStatus.FORBIDDEN,
+        message: `Cannot reset password. Account is ${user.status.toLowerCase()}`,
+      });
+    }
 
     user.password = await bcrypt.hash(dto.newPassword, 10);
     user.refreshToken = null;

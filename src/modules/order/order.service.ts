@@ -16,7 +16,7 @@ import { User } from 'src/modules/users/schema/user.schema';
 import { PaymentMethod, PaymentStatus } from 'src/common/enum/payment.enum';
 import { v4 as uuidv4 } from 'uuid';
 import { UpdateOrderStatusDto } from 'src/modules/order/dto/update-order.dto';
-import { Product } from 'src/modules/products/product.schema';
+import { Product } from 'src/modules/products/schema/product.schema';
 import { ProductAvailability } from 'src/common/enum/product-availability.enum';
 
 @Injectable()

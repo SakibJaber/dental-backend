@@ -2,11 +2,19 @@ import { Module } from '@nestjs/common';
 import { GlobalSearchController } from './global-search.controller';
 import { GlobalSearchService } from './global-search.service';
 import { MongooseModule } from '@nestjs/mongoose';
-import { Product, ProductSchema } from 'src/modules/products/product.schema';
-import { Category, CategorySchema } from 'src/modules/categories/category.schema';
-import { Procedure, ProcedureSchema } from 'src/modules/procedure/procedure.schema';
+import {
+  Product,
+  ProductSchema,
+} from 'src/modules/products/schema/product.schema';
+import {
+  Category,
+  CategorySchema,
+} from 'src/modules/categories/category.schema';
+import {
+  Procedure,
+  ProcedureSchema,
+} from 'src/modules/procedure/procedure.schema';
 import { Brand, BrandSchema } from 'src/modules/brand/brand.schema';
-
 
 @Module({
   imports: [

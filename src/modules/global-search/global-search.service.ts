@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Product } from 'src/modules/products/product.schema';
+import { Product } from 'src/modules/products/schema/product.schema';
 import { Category } from 'src/modules/categories/category.schema';
 import { Model } from 'mongoose';
 import { Brand } from 'src/modules/brand/brand.schema';
@@ -17,11 +17,7 @@ export class GlobalSearchService {
     @InjectModel(Procedure.name) private procedureModel: Model<Procedure>,
   ) {}
 
-  async search(
-    query: string,
-    limit = 10,
-    modules?: string[]
-  ) {
+  async search(query: string, limit = 10, modules?: string[]) {
     const regex = new RegExp(query, 'i');
     const results: Record<string, any> = {};
 
@@ -33,10 +29,7 @@ export class GlobalSearchService {
       promises.push(
         this.productModel
           .find({
-            $or: [
-              { name: regex },
-              { description: regex },
-            ],
+            $or: [{ name: regex }, { description: regex }],
           })
           .limit(safeLimit)
           .select('name price imageUrl category brand procedure')
@@ -46,7 +39,7 @@ export class GlobalSearchService {
           .lean()
           .then((items) => {
             results.products = items;
-          })
+          }),
       );
     }
 
@@ -60,7 +53,7 @@ export class GlobalSearchService {
           .lean()
           .then((items) => {
             results.brands = items;
-          })
+          }),
       );
     }
 
@@ -74,7 +67,7 @@ export class GlobalSearchService {
           .lean()
           .then((items) => {
             results.categories = items;
-          })
+          }),
       );
     }
 
@@ -83,17 +76,14 @@ export class GlobalSearchService {
       promises.push(
         this.procedureModel
           .find({
-            $or: [
-              { name: regex },
-              { description: regex },
-            ],
+            $or: [{ name: regex }, { description: regex }],
           })
           .limit(safeLimit)
           .select('name description imageUrl')
           .lean()
           .then((items) => {
             results.procedures = items;
-          })
+          }),
       );
     }
 

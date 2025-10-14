@@ -5,6 +5,8 @@ import {
   Req,
   UseGuards,
   UploadedFile,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupAuthDto } from './dto/signup-auth.dto';
@@ -21,46 +23,85 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('signup')
+  @HttpCode(HttpStatus.CREATED)
   @UseGlobalFileInterceptor({ fieldName: 'image' })
-  signup(
+  async signup(
     @Body() dto: SignupAuthDto,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    return this.authService.signup(dto,file);
+    const result = await this.authService.signup(dto, file);
+    return {
+      statusCode: HttpStatus.CREATED,
+      message: 'Account created successfully, pending approval',
+      data: result,
+    };
   }
 
   @Post('login')
-  login(@Body() dto: LoginAuthDto) {
-    return this.authService.login(dto);
+  @HttpCode(HttpStatus.OK)
+  async login(@Body() dto: LoginAuthDto) {
+    const tokens = await this.authService.login(dto);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Login successful',
+      data: tokens,
+    };
   }
 
   @Post('forgot')
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto);
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    await this.authService.forgotPassword(dto);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'OTP sent to your email successfully',
+    };
   }
 
   @Post('verify-otp')
-  verifyOtp(@Body() dto: VerifyOtpDto) {
-    return this.authService.verifyOtp(dto);
+  @HttpCode(HttpStatus.OK)
+  async verifyOtp(@Body() dto: VerifyOtpDto) {
+    const result = await this.authService.verifyOtp(dto);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'OTP verified successfully',
+      data: result,
+    };
   }
 
   @Post('reset-password')
-  resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto);
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.authService.resetPassword(dto);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Password reset successfully',
+    };
   }
 
   @UseGuards(JwtAuthGuard)
   @Post('logout')
-  logout(@Req() req: any) {
-    return this.authService.logout(req.user.userId);
+  @HttpCode(HttpStatus.OK)
+  async logout(@Req() req: any) {
+    await this.authService.logout(req.user.userId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Logged out successfully',
+    };
   }
 
   @UseGuards(RefreshTokenGuard)
   @Post('refresh')
-  refresh(@Req() req: any) {
-    return this.authService.refreshTokens(
+  @HttpCode(HttpStatus.OK)
+  async refresh(@Req() req: any) {
+    const tokens = await this.authService.refreshTokens(
       req.user.userId,
       req.user.refreshToken,
     );
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Tokens refreshed successfully',
+      data: tokens,
+    };
   }
 }

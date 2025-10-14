@@ -24,6 +24,12 @@ export class AddressController {
     return this.addressService.create(req.user.userId, dto);
   }
 
+  // Get my addresses
+  @Get('my')
+  getMyAddresses(@Req() req) {
+    return this.addressService.findAll(req.user.userId);
+  }
+
   @Get()
   findAll(@Req() req) {
     return this.addressService.findAll(req.user.userId);
