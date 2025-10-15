@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+// contact-info.service.ts
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ContactInfo, ContactInfoDocument } from './contact-info.schema';
 import { Model } from 'mongoose';
@@ -11,12 +12,10 @@ export class ContactInfoService {
   ) {}
 
   private async getOrCreate(): Promise<ContactInfoDocument> {
-    let contact = await this.contactModel.findOne();
-    if (!contact) {
-      contact = new this.contactModel();
-      await contact.save();
-    }
-    return contact;
+    // Find existing or create one (singleton)
+    const doc = await this.contactModel.findOne();
+    if (doc) return doc;
+    return this.contactModel.create({});
   }
 
   async getContactInfo() {
@@ -29,34 +28,64 @@ export class ContactInfoService {
     return contact.save();
   }
 
+  // ---- single-item ops (kept for backward compatibility)
   async addEmail(email: string) {
-    const contact = await this.getOrCreate();
-    if (!contact.emails.includes(email)) {
-      contact.emails.push(email);
-    }
-    return contact.save();
+    await this.contactModel.updateOne(
+      {},
+      { $addToSet: { emails: email } },
+      { upsert: true },
+    );
+    return this.getOrCreate();
   }
 
   async removeEmail(email: string) {
-    const contact = await this.getOrCreate();
-    contact.emails = contact.emails.filter((e) => e !== email);
-    await contact.save();
+    await this.contactModel.updateOne({}, { $pull: { emails: email } });
   }
 
   async addPhone(phone: string) {
-    const contact = await this.getOrCreate();
-    if (!contact.phone) contact.phone = [];
-    if (!contact.phone.includes(phone)) {
-      contact.phone.push(phone);
-    }
-    return contact.save();
+    await this.contactModel.updateOne(
+      {},
+      { $addToSet: { phone } },
+      { upsert: true },
+    );
+    return this.getOrCreate();
   }
 
   async removePhone(phone: string) {
-    const contact = await this.getOrCreate();
-    if (contact.phone) {
-      contact.phone = contact.phone.filter((p) => p !== phone);
-      await contact.save();
-    }
+    await this.contactModel.updateOne({}, { $pull: { phone } });
+  }
+
+  // ---- bulk ops
+  async addEmails(emails: string[]) {
+    // $addToSet with $each ensures dedupe + atomicity
+    await this.contactModel.updateOne(
+      {},
+      { $addToSet: { emails: { $each: emails } } },
+      { upsert: true },
+    );
+    return this.getOrCreate();
+  }
+
+  async addPhones(phones: string[]) {
+    await this.contactModel.updateOne(
+      {},
+      { $addToSet: { phone: { $each: phones } } },
+      { upsert: true },
+    );
+    return this.getOrCreate();
+  }
+
+  async removeEmails(emails: string[]) {
+    await this.contactModel.updateOne(
+      {},
+      { $pull: { emails: { $in: emails } } },
+    );
+  }
+
+  async removePhones(phones: string[]) {
+    await this.contactModel.updateOne(
+      {},
+      { $pull: { phone: { $in: phones } } },
+    );
   }
 }

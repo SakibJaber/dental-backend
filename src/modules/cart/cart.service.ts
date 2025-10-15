@@ -62,7 +62,7 @@ export class CartService {
   async getCart(userId: string) {
     const cart = await this.cartModel
       .findOne({ user: new Types.ObjectId(userId) })
-      .populate<{ items: { product: PopulatedProduct; quantity: number }[] }>(
+      .populate<{ items: { product: PopulatedProduct | null; quantity: number }[] }>(
         'items.product',
         'name price imageUrl availability',
       )
@@ -70,10 +70,10 @@ export class CartService {
 
     if (!cart) return { items: [] };
 
-    // Filter out unavailable products - now TypeScript knows product is PopulatedProduct
+    // Filter out unavailable or non-existent products
     const availableItems = cart.items.filter((item) => {
-      const product = item.product as PopulatedProduct;
-      return product.availability === ProductAvailability.IN_STOCK;
+      if (!item.product) return false; // Skip if product is null/undefined
+      return item.product.availability === ProductAvailability.IN_STOCK;
     });
 
     // Update cart if some items were unavailable
@@ -135,7 +135,7 @@ export class CartService {
   async validateCartForCheckout(userId: string) {
     const cart = await this.cartModel
       .findOne({ user: new Types.ObjectId(userId) })
-      .populate<{ items: { product: PopulatedProduct; quantity: number }[] }>(
+      .populate<{ items: { product: PopulatedProduct | null; quantity: number }[] }>(
         'items.product',
         'name price availability stock',
       )
@@ -147,18 +147,31 @@ export class CartService {
 
     // Check stock availability
     const outOfStockItems: string[] = [];
+    const invalidItems: string[] = [];
+    
     for (const item of cart.items) {
-      // Explicitly cast to PopulatedProduct
-      const product = item.product as PopulatedProduct;
-
-      if (product.availability !== ProductAvailability.IN_STOCK) {
-        outOfStockItems.push(product.name);
+      if (!item.product) {
+        invalidItems.push('Unknown product');
+        continue;
       }
+
+      const product = item.product;
+      
+      if (product.availability !== ProductAvailability.IN_STOCK) {
+        outOfStockItems.push(product.name || 'Unknown product');
+      }
+      
       if (product.stock < item.quantity) {
         throw new ConflictException(
-          `Insufficient stock for ${product.name}. Only ${product.stock} available`,
+          `Insufficient stock for ${product.name || 'a product'}. Only ${product.stock} available`,
         );
       }
+    }
+
+    if (invalidItems.length > 0) {
+      throw new NotFoundException(
+        `Some products in your cart are no longer available: ${invalidItems.join(', ')}`
+      );
     }
 
     if (outOfStockItems.length > 0) {

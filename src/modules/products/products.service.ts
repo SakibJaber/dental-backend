@@ -173,9 +173,9 @@ export class ProductsService {
           filter.category = { $in: categoryIds };
         }
 
-        this.logger.debug(
-          `Filtering by categories: ${JSON.stringify(categoryIds)}`,
-        );
+        // this.logger.debug(
+        //   `Filtering by categories: ${JSON.stringify(categoryIds)}`,
+        // );
       } catch (error) {
         this.logger.error(`Invalid category ID: ${error.message}`, error.stack);
         throw new BadRequestException('Invalid category ID format');
@@ -198,7 +198,7 @@ export class ProductsService {
           filter.brand = { $in: brandIds };
         }
 
-        this.logger.debug(`Filtering by brands: ${JSON.stringify(brandIds)}`);
+        // this.logger.debug(`Filtering by brands: ${JSON.stringify(brandIds)}`);
       } catch (error) {
         this.logger.error(`Invalid brand ID: ${error.message}`, error.stack);
         throw new BadRequestException('Invalid brand ID format');
@@ -221,9 +221,9 @@ export class ProductsService {
           filter.procedure = { $in: procedureIds };
         }
 
-        this.logger.debug(
-          `Filtering by procedures: ${JSON.stringify(procedureIds)}`,
-        );
+        // this.logger.debug(
+        //   `Filtering by procedures: ${JSON.stringify(procedureIds)}`,
+        // );
       } catch (error) {
         this.logger.error(
           `Invalid procedure ID: ${error.message}`,
@@ -253,9 +253,9 @@ export class ProductsService {
     const skip = (page - 1) * limit;
 
     try {
-      this.logger.debug(
-        `Executing find with filter: ${JSON.stringify(filter, null, 2)}`,
-      );
+      // this.logger.debug(
+      //   `Executing find with filter: ${JSON.stringify(filter, null, 2)}`,
+      // );
 
       const [data, total] = await Promise.all([
         this.productModel

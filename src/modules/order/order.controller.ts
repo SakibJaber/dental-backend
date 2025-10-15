@@ -57,21 +57,29 @@ export class OrdersController {
     const cart = await this.cartService.validateCartForCheckout(userId);
 
     // Override DTO products with validated cart items for security
-    createOrderDto.products = cart.items.map((item) => ({
-      product: item.product._id.toString(),
-      name: item.product.name,
-      price: item.product.price,
-      quantity: item.quantity,
-      image: Array.isArray(item.product.imageUrl)
-        ? item.product.imageUrl[0]
-        : item.product.imageUrl,
-    }));
+    createOrderDto.products = cart.items
+      .filter(item => item.product !== null) // Filter out any null products
+      .map((item) => {
+        // We've already filtered out null products, so we can safely use non-null assertion here
+        const product = item.product!;
+        return {
+          product: product._id.toString(),
+          name: product.name,
+          price: product.price,
+          quantity: item.quantity,
+          image: Array.isArray(product.imageUrl)
+            ? product.imageUrl[0]
+            : product.imageUrl,
+        };
+      });
 
     // Recalculate totals server-side based on cart
-    createOrderDto.subtotal = cart.items.reduce(
-      (sum, item) => sum + item.product.price * item.quantity,
-      0,
-    );
+    createOrderDto.subtotal = cart.items
+      .filter(item => item.product !== null) // Filter out any null products
+      .reduce(
+        (sum, item) => sum + item.product!.price * item.quantity,
+        0,
+      );
     createOrderDto.total = createOrderDto.subtotal;
 
     // Create order (validation already done here)

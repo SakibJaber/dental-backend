@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Patch,
   Body,
   Req,
   UseGuards,
@@ -11,11 +12,12 @@ import {
 import { AuthService } from './auth.service';
 import { SignupAuthDto } from './dto/signup-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from 'src/common/guard/jwt-auth.guard';
 import { RefreshTokenGuard } from 'src/common/guard/refresh-token.guard';
-import { ForgotPasswordDto } from 'src/modules/auth/dto/forgot-password.dto';
-import { ResetPasswordDto } from 'src/modules/auth/dto/reset-password.dto';
-import { VerifyOtpDto } from 'src/modules/auth/dto/verify-otp.dto';
 import { UseGlobalFileInterceptor } from 'src/common/decorator/globalFileInterceptor.decorator';
 
 @Controller('auth')
@@ -27,7 +29,7 @@ export class AuthController {
   @UseGlobalFileInterceptor({ fieldName: 'image' })
   async signup(
     @Body() dto: SignupAuthDto,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file?: Express.Multer.File,
   ) {
     const result = await this.authService.signup(dto, file);
     return {
@@ -58,6 +60,28 @@ export class AuthController {
     };
   }
 
+  // Email verification flows (separate from password-reset OTP)
+  @Post('email/send-otp')
+  @HttpCode(HttpStatus.OK)
+  async sendEmailVerificationOtp(@Body() dto: { email: string }) {
+    await this.authService.sendEmailVerificationOtp(dto.email);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Verification OTP sent',
+    };
+  }
+
+  @Post('email/verify')
+  @HttpCode(HttpStatus.OK)
+  async verifyEmail(@Body() dto: VerifyOtpDto) {
+    await this.authService.verifyEmailOtp(dto);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Email verified successfully',
+    };
+  }
+
+  // Password-reset OTP verification (returns resetToken)
   @Post('verify-otp')
   @HttpCode(HttpStatus.OK)
   async verifyOtp(@Body() dto: VerifyOtpDto) {
@@ -65,7 +89,7 @@ export class AuthController {
     return {
       statusCode: HttpStatus.OK,
       message: 'OTP verified successfully',
-      data: result,
+      data: result, // { resetToken }
     };
   }
 
@@ -76,6 +100,17 @@ export class AuthController {
     return {
       statusCode: HttpStatus.OK,
       message: 'Password reset successfully',
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('change-password')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
+    await this.authService.changePassword(req.user.userId, dto);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Password changed successfully. Please log in again.',
     };
   }
 

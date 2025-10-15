@@ -15,6 +15,11 @@ import { Roles } from 'src/common/decorator/roles.decorator';
 import { Role } from 'src/common/enum/user_role.enum';
 import { JwtAuthGuard } from 'src/common/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guard/roles.guard';
+import {
+  AddEmailsDto,
+  RemoveManyDto,
+  AddPhonesDto,
+} from 'src/modules/contacts/contact-info/dto/create-contact-info.dto';
 
 @Controller('contact-info')
 export class ContactInfoController {
@@ -32,7 +37,7 @@ export class ContactInfoController {
     return this.contactInfoService.updateContactInfo(body);
   }
 
-  // EMAILS
+  // ------- SINGLE EMAIL (backward compatible)
   @Post('email')
   @Roles(Role.ADMIN)
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -48,7 +53,7 @@ export class ContactInfoController {
     return this.contactInfoService.removeEmail(email);
   }
 
-  // PHONES
+  // ------- SINGLE PHONE (backward compatible)
   @Post('phone')
   @Roles(Role.ADMIN)
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -62,5 +67,37 @@ export class ContactInfoController {
   @HttpCode(HttpStatus.NO_CONTENT)
   removePhone(@Param('phone') phone: string) {
     return this.contactInfoService.removePhone(phone);
+  }
+
+  // ------- BULK EMAILS
+  @Post('emails')
+  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  addEmails(@Body() dto: AddEmailsDto) {
+    return this.contactInfoService.addEmails(dto.emails);
+  }
+
+  @Delete('emails')
+  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeEmails(@Body() dto: RemoveManyDto) {
+    return this.contactInfoService.removeEmails(dto.items);
+  }
+
+  // ------- BULK PHONES
+  @Post('phones')
+  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  addPhones(@Body() dto: AddPhonesDto) {
+    return this.contactInfoService.addPhones(dto.phones);
+  }
+
+  @Delete('phones')
+  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removePhones(@Body() dto: RemoveManyDto) {
+    return this.contactInfoService.removePhones(dto.items);
   }
 }

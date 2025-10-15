@@ -6,7 +6,6 @@ import { ProductsModule } from 'src/modules/products/products.module';
 import { UsersModule } from 'src/modules/users/users.module';
 import { SliderModule } from './slider/slider.module';
 import { AddressModule } from './address/address.module';
-import { LegalPageModule } from './legal-page/legal-page.module';
 import { ContactInfoModule } from 'src/modules/contacts/contact-info/contact-info.module';
 import { ContactModule } from 'src/modules/contacts/contact/contact.module';
 import { ProcedureModule } from './procedure/procedure.module';
@@ -16,6 +15,7 @@ import { OrderModule } from './order/order.module';
 import { CartModule } from './cart/cart.module';
 import { GlobalSearchModule } from './global-search/global-search.module';
 import { FavouritesModule } from './favourites/favourites.module';
+import { PagesModule } from './pages/pages.module';
 
 @Module({
   imports: [
@@ -26,7 +26,6 @@ import { FavouritesModule } from './favourites/favourites.module';
     BrandModule,
     SliderModule,
     AddressModule,
-    LegalPageModule,
     ContactInfoModule,
     ContactModule,
     ProcedureModule,
@@ -35,7 +34,8 @@ import { FavouritesModule } from './favourites/favourites.module';
     OrderModule,
     CartModule,
     GlobalSearchModule,
-    FavouritesModule
+    FavouritesModule,
+    PagesModule
   ],
   controllers: [],
   providers: [],

@@ -10,6 +10,8 @@ import {
   Request,
   ForbiddenException,
   NotFoundException,
+  HttpStatus,
+  UploadedFile,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { Roles } from 'src/common/decorator/roles.decorator';
@@ -17,6 +19,8 @@ import { UserStatus } from 'src/common/enum/user.status.enum';
 import { Role } from 'src/common/enum/user_role.enum';
 import { JwtAuthGuard } from 'src/common/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guard/roles.guard';
+import { UseGlobalFileInterceptor } from 'src/common/decorator/globalFileInterceptor.decorator';
+import { UpdateProfileDto } from 'src/modules/users/dto/update-profile.dto';
 
 @Controller('users')
 export class UsersController {
@@ -27,6 +31,22 @@ export class UsersController {
   @UseGuards(JwtAuthGuard)
   async getProfile(@Request() req) {
     return await this.usersService.findByIdWithAddresses(req.user.userId);
+  }
+
+  @Patch('profile')
+  @UseGuards(JwtAuthGuard)
+  @UseGlobalFileInterceptor({ fieldName: 'image' })
+  async updateMyProfile(
+    @Request() req,
+    @Body() dto: UpdateProfileDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const user = await this.usersService.updateOwnProfile(req.user.userId, dto, file);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Profile updated successfully',
+      data: user,
+    };
   }
 
   // Get all users with pagination and filtering (Admin only)

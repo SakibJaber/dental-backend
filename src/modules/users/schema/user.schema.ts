@@ -47,6 +47,15 @@ export class User {
 
   @Prop({ type: Date, default: null })
   resetPasswordExpires?: Date | null;
+
+  @Prop({ type: String, default: null })
+  emailVerificationCodeHash?: string | null;
+
+  @Prop({ type: Date, default: null })
+  emailVerificationExpires?: Date | null;
+
+  @Prop({ type: Date, default: null })
+  emailVerifiedAt?: Date | null; // optional convenience
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

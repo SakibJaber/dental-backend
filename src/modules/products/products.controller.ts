@@ -38,7 +38,13 @@ export class ProductsController {
     @Body() createProductDto: CreateProductDto,
     @UploadedFiles() files?: Express.Multer.File[],
   ) {
-    return this.productsService.create(createProductDto, files);
+    const product = await this.productsService.create(createProductDto, files);
+    return {
+      status: 'success',
+      statusCode: HttpStatus.CREATED,
+      message: 'Product created successfully',
+      data: product,
+    };
   }
 
   @Get()
@@ -65,7 +71,7 @@ export class ProductsController {
     }
 
     const userId = req?.user?.id;
-    return this.productsService.findAll(
+    const result = await this.productsService.findAll(
       page,
       limit,
       search,
@@ -78,6 +84,19 @@ export class ProductsController {
       maxPrice,
       userId,
     );
+
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Products fetched successfully',
+      data: result.data,
+      meta: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
+      },
+    };
   }
 
   @Get('hot')
@@ -90,13 +109,29 @@ export class ProductsController {
       throw new BadRequestException('Limit cannot exceed 50');
     }
     const userId = req?.user?.id;
-    return this.productsService.getHotSellingProducts(limit, days, userId);
+    const products = await this.productsService.getHotSellingProducts(
+      limit,
+      days,
+      userId,
+    );
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Hot selling products fetched successfully',
+      data: products,
+    };
   }
 
   @Get(':id')
   async findOne(@Param('id') id: string, @Request() req?: any) {
-    const userId = req?.user?.id; // Will be undefined if not logged in
-    return this.productsService.findOne(id, userId);
+    const userId = req?.user?.id;
+    const product = await this.productsService.findOne(id, userId);
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Product fetched successfully',
+      data: product,
+    };
   }
 
   @Get('byid/:productId')
@@ -107,7 +142,16 @@ export class ProductsController {
     @Request() req?: any,
   ) {
     const userId = req?.user?.id;
-    return this.productsService.findOneByProductId(productId, userId);
+    const product = await this.productsService.findOneByProductId(
+      productId,
+      userId,
+    );
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Product fetched successfully',
+      data: product,
+    };
   }
 
   @Put(':id')
@@ -117,7 +161,17 @@ export class ProductsController {
     @Body() updateProductDto: UpdateProductDto,
     @UploadedFiles() files?: Express.Multer.File[],
   ) {
-    return this.productsService.update(id, updateProductDto, files);
+    const updated = await this.productsService.update(
+      id,
+      updateProductDto,
+      files,
+    );
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Product updated successfully',
+      data: updated,
+    };
   }
 
   @Post(':id/images')
@@ -129,7 +183,13 @@ export class ProductsController {
     if (!files || files.length === 0) {
       throw new BadRequestException('No images provided');
     }
-    return this.productsService.addImages(id, files);
+    const updated = await this.productsService.addImages(id, files);
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Images added successfully',
+      data: updated,
+    };
   }
 
   @Delete(':id/images/:index')
@@ -140,7 +200,13 @@ export class ProductsController {
     if (index < 0) {
       throw new BadRequestException('Invalid image index');
     }
-    return this.productsService.removeImage(id, index);
+    const updated = await this.productsService.removeImage(id, index);
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Image removed successfully',
+      data: updated,
+    };
   }
 
   @Patch(':id/stock')
@@ -151,7 +217,13 @@ export class ProductsController {
     if (stock < 0) {
       throw new BadRequestException('Stock cannot be negative');
     }
-    return this.productsService.updateStock(id, stock);
+    const updated = await this.productsService.updateStock(id, stock);
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Stock updated successfully',
+      data: updated,
+    };
   }
 
   @Patch(':id/sales')
@@ -162,12 +234,24 @@ export class ProductsController {
     if (quantity <= 0) {
       throw new BadRequestException('Quantity must be positive');
     }
-    return this.productsService.incrementSales(id, quantity);
+    const updated = await this.productsService.incrementSales(id, quantity);
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Sales incremented successfully',
+      data: updated,
+    };
   }
 
   @Patch(':id/featured')
   async toggleFeatured(@Param('id') id: string) {
-    return this.productsService.toggleFeatured(id);
+    const updated = await this.productsService.toggleFeatured(id);
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Product featured status toggled',
+      data: updated,
+    };
   }
 
   @Get('featured')
@@ -177,13 +261,20 @@ export class ProductsController {
     if (limit > 50) {
       throw new BadRequestException('Limit cannot exceed 50');
     }
-    return this.productsService.getFeaturedProducts(limit);
+    const items = await this.productsService.getFeaturedProducts(limit);
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Featured products fetched successfully',
+      data: items,
+    };
   }
 
   @Delete(':id')
   async remove(@Param('id') id: string) {
     await this.productsService.remove(id);
     return {
+      status: 'success',
       statusCode: HttpStatus.OK,
       message: 'Product deleted successfully',
     };
@@ -202,7 +293,13 @@ export class ProductsController {
     if (limit > 100) {
       throw new BadRequestException('Limit cannot exceed 100');
     }
-    return this.productsService.getSalesAnalytics(days, limit);
+    const analytics = await this.productsService.getSalesAnalytics(days, limit);
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Sales analytics fetched successfully',
+      data: analytics,
+    };
   }
 
   @Get(':id/related')
@@ -215,7 +312,17 @@ export class ProductsController {
       throw new BadRequestException('Limit cannot exceed 20');
     }
     const userId = req?.user?.id;
-    return this.productsService.getRelatedProducts(id, limit, userId);
+    const products = await this.productsService.getRelatedProducts(
+      id,
+      limit,
+      userId,
+    );
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Related products fetched successfully',
+      data: products,
+    };
   }
 
   @Get(':id/frequently-bought-together')
@@ -228,6 +335,16 @@ export class ProductsController {
       throw new BadRequestException('Limit cannot exceed 10');
     }
     const userId = req?.user?.id;
-    return this.productsService.getFrequentlyBoughtTogether(id, limit, userId);
+    const products = await this.productsService.getFrequentlyBoughtTogether(
+      id,
+      limit,
+      userId,
+    );
+    return {
+      status: 'success',
+      statusCode: HttpStatus.OK,
+      message: 'Frequently bought together products fetched successfully',
+      data: products,
+    };
   }
 }

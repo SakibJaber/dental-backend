@@ -1,3 +1,4 @@
+// contact-info.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 
@@ -8,8 +9,8 @@ export class ContactInfo {
   @Prop({ type: [String], default: [] })
   emails: string[];
 
-  @Prop()
-  phone?: string[];
+  @Prop({ type: [String], default: [] })
+  phone: string[]; 
 
   @Prop()
   facebook?: string;

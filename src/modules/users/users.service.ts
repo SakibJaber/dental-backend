@@ -8,6 +8,7 @@ import { Model, Types } from 'mongoose';
 import { UserStatus } from 'src/common/enum/user.status.enum';
 import { Role } from 'src/common/enum/user_role.enum';
 import { Address, AddressDocument } from 'src/modules/address/address.schema';
+import { FileUploadService } from 'src/modules/file-upload/file-upload.service';
 import { NotificationService } from 'src/modules/notification/notification.service';
 import { User, UserDocument } from 'src/modules/users/schema/user.schema';
 
@@ -16,6 +17,7 @@ export class UsersService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
+    private fileUploadService: FileUploadService,
     private readonly notificationService: NotificationService,
   ) {}
 
@@ -145,6 +147,39 @@ export class UsersService {
     return savedUser;
   }
 
+  async updateOwnProfile(
+    userId: string,
+    dto: Partial<
+      Pick<
+        User,
+        'firstName' | 'lastName' | 'phone' | 'gdcNumber' | 'clinicName'
+      >
+    >,
+    file?: Express.Multer.File,
+  ): Promise<any> {
+    const user = await this.userModel.findById(userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    // Prevent changing restricted fields through this endpoint
+    const allowed = ['firstName', 'lastName', 'phone', 'gdcNumber', 'clinicName']
+      .reduce((obj, key) => (key in dto ? { ...obj, [key]: dto[key as keyof typeof dto] } : obj), {});
+
+    if (file) {
+      const imageUrl = await this.fileUploadService.handleUpload(file);
+      allowed['imageUrl'] = imageUrl;
+    }
+
+    Object.assign(user, allowed);
+    await user.save();
+
+    // sanitize output
+    const { password, refreshToken, ...safe } = user.toObject({
+      getters: true,
+      virtuals: false,
+    });
+    return safe;
+  }
+ 
   // Update user profile
   async updateUser(
     id: string,

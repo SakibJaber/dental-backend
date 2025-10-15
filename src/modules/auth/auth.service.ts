@@ -4,38 +4,75 @@ import {
   ForbiddenException,
   BadRequestException,
   HttpStatus,
+  InternalServerErrorException,
 } from '@nestjs/common';
-import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { SignupAuthDto } from './dto/signup-auth.dto';
-import { LoginAuthDto } from './dto/login-auth.dto';
+import { UserDocument } from '../users/schema/user.schema';
+import { UsersService } from 'src/modules/users/users.service';
 import { MailService } from 'src/modules/mail/mail.service';
-import { ForgotPasswordDto } from 'src/modules/auth/dto/forgot-password.dto';
-import { ResetPasswordDto } from 'src/modules/auth/dto/reset-password.dto';
-import { VerifyOtpDto } from 'src/modules/auth/dto/verify-otp.dto';
-import { UserStatus } from 'src/common/enum/user.status.enum';
 import { FileUploadService } from 'src/modules/file-upload/file-upload.service';
 import { NotificationService } from 'src/modules/notification/notification.service';
-import { User, UserDocument } from 'src/modules/users/schema/user.schema';
+import { SignupAuthDto } from './dto/signup-auth.dto';
+import { LoginAuthDto } from './dto/login-auth.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+
+import { UserStatus } from 'src/common/enum/user.status.enum';
 import { Role } from 'src/common/enum/user_role.enum';
 
 @Injectable()
 export class AuthService {
   private readonly otpExpiryMs: number;
+
   constructor(
-    private usersService: UsersService,
+    private readonly usersService: UsersService,
     private readonly notificationService: NotificationService,
-    private fileUploadService: FileUploadService,
-    private mailService: MailService,
-    private jwt: JwtService,
-    private config: ConfigService,
+    private readonly fileUploadService: FileUploadService,
+    private readonly mailService: MailService,
+    private readonly jwt: JwtService,
+    private readonly config: ConfigService,
   ) {
     this.otpExpiryMs =
       (+this.config.get<number>('OTP_EXPIRATION_MINUTES')! || 15) * 60 * 1000;
   }
 
+  /* =======================
+   * Helpers
+   * ======================= */
+  private sanitize(user: UserDocument) {
+    const { password, refreshToken, ...safe } = user.toObject({
+      getters: true,
+      virtuals: false,
+    });
+    return safe;
+  }
+
+  private async signTokens(userId: string, email: string, role: string | Role) {
+    const payload = { userId, email, role };
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwt.signAsync(payload, {
+        secret: this.config.get<string>('JWT_SECRET'),
+        expiresIn: this.config.get<string>('JWT_ACC_EXPIRATION'),
+      }),
+      this.jwt.signAsync(payload, {
+        secret: this.config.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: this.config.get<string>('JWT_REF_EXPIRATION'),
+      }),
+    ]);
+    return { accessToken, refreshToken };
+  }
+
+  private generateCode(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit
+  }
+
+  /* =======================
+   * Signup & Email Verification
+   * ======================= */
   async signup(dto: SignupAuthDto, file?: Express.Multer.File) {
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) {
@@ -45,51 +82,129 @@ export class AuthService {
       });
     }
 
-    const hash = await bcrypt.hash(dto.password, 10);
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     let imageUrl: string | undefined;
     if (file) {
-      // Assuming fileUploadService.handleUpload is defined elsewhere
-      // and fileUploadService is injected in the constructor
-      // imageUrl = await this.fileUploadService.handleUpload(file);
-      imageUrl = 'mock-image-url'; // Placeholder for demonstration
+      // implement FileUploadService.handleUpload to return a public URL
+      imageUrl = await this.fileUploadService.handleUpload(file);
     }
 
-    const user = await this.usersService.createUser({
+    // Create user as PENDING (admin approval) and not verified (email)
+    const user: UserDocument = await this.usersService.createUser({
       ...dto,
-      password: hash,
+      password: passwordHash,
       imageUrl,
       status: UserStatus.PENDING,
+      isVerified: false,
     });
 
-    const userPlainObject = user.toObject({
-      getters: true, // Include any virtual properties
-      virtuals: false,
-    });
-    // Destructuring a plain object doesn't include the Mongoose metadata.
-    const { password, refreshToken, ...userWithoutSensitiveData } =
-      userPlainObject; // Notify all admins
+    // Generate email verification OTP
+    const code = this.generateCode();
+    user.emailVerificationCodeHash = await bcrypt.hash(code, 10);
+    user.emailVerificationExpires = new Date(Date.now() + this.otpExpiryMs);
+    await user.save();
 
-    const admins = await this.usersService.findAllByRole(Role.ADMIN);
-    await Promise.all(
-      admins.map(
-        (
-          admin, 
-        ) =>
+    // Send verification email (don’t fail signup if email send fails)
+    try {
+      await this.mailService.sendEmailVerificationOtp(user.email, code);
+    } catch (err) {
+      // optionally log: throw new InternalServerErrorException('Failed to send verification email');
+    }
+
+    // Notify admins about new signup
+    try {
+      const admins = await this.usersService.findAllByRole(Role.ADMIN);
+      await Promise.all(
+        admins.map((admin) =>
           this.notificationService.createNotification({
             title: 'New signup',
             body: `${user.email} has signed up and needs approval.`,
             user: admin.id,
-            metadata: { signup: true, newUserId: userPlainObject._id },
+            metadata: { signup: true, newUserId: user.id },
           }),
-      ),
-    );
+        ),
+      );
+    } catch {
+      // swallow admin notification errors
+    }
 
-    return {
-      user: userWithoutSensitiveData,
-    };
+    return { user: this.sanitize(user) };
   }
 
+  async sendEmailVerificationOtp(email: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'User not found',
+      });
+    }
+
+    // regenerate & store code
+    const code = this.generateCode();
+    user.emailVerificationCodeHash = await bcrypt.hash(code, 10);
+    user.emailVerificationExpires = new Date(Date.now() + this.otpExpiryMs);
+    await user.save();
+
+    await this.mailService.sendEmailVerificationOtp(email, code);
+  }
+
+  async verifyEmailOtp(dto: VerifyOtpDto) {
+    const user = await this.usersService.findByEmail(dto.email);
+    if (
+      !user ||
+      !user.emailVerificationCodeHash ||
+      !user.emailVerificationExpires
+    ) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message:
+          'Verification code not found or expired. Please request a new code',
+      });
+    }
+
+    if (user.emailVerificationExpires < new Date()) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'Verification code has expired. Please request a new code',
+      });
+    }
+
+    const ok = await bcrypt.compare(
+      dto.code.toString(),
+      user.emailVerificationCodeHash,
+    );
+    if (!ok) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'Invalid verification code',
+      });
+    }
+
+    user.isVerified = true;
+    user.emailVerifiedAt = new Date();
+    user.emailVerificationCodeHash = null;
+    user.emailVerificationExpires = null;
+    await user.save();
+
+    // Optional: notify user or admins
+    try {
+      await this.mailService.sendEmail(
+        user.email,
+        'Email verified',
+        'Your email has been successfully verified.',
+      );
+    } catch {
+      // ignore
+    }
+
+    return { message: 'Email verified' };
+  }
+
+  /* =======================
+   * Login / Tokens / Logout
+   * ======================= */
   async login(dto: LoginAuthDto) {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user || !(await bcrypt.compare(dto.password, user.password))) {
@@ -99,7 +214,7 @@ export class AuthService {
       });
     }
 
-    // Check account status
+    // Account status checks
     switch (user.status) {
       case UserStatus.PENDING:
         throw new UnauthorizedException({
@@ -120,18 +235,21 @@ export class AuthService {
         });
     }
 
-    const tokens = await this.getTokens(user.id, user.email, user.role);
+    // Require verified email (optional but recommended)
+    if (!user.isVerified) {
+      throw new UnauthorizedException({
+        statusCode: HttpStatus.UNAUTHORIZED,
+        message: 'Please verify your email address to continue',
+      });
+    }
+
+    const tokens = await this.signTokens(user.id, user.email, user.role);
     await this.usersService.updateRefreshToken(
       user.id,
       await bcrypt.hash(tokens.refreshToken, 10),
     );
 
     return tokens;
-  }
-
-  async logout(userId: string) {
-    await this.usersService.updateRefreshToken(userId, null);
-    return { message: 'Logged out successfully' };
   }
 
   async refreshTokens(userId: string, refreshToken: string) {
@@ -159,7 +277,7 @@ export class AuthService {
       });
     }
 
-    const tokens = await this.getTokens(user.id, user.email, user.role);
+    const tokens = await this.signTokens(user.id, user.email, user.role);
     await this.usersService.updateRefreshToken(
       user.id,
       await bcrypt.hash(tokens.refreshToken, 10),
@@ -167,22 +285,58 @@ export class AuthService {
     return tokens;
   }
 
-  private async getTokens(userId: string, email: string, role: string) {
-    const payload = { userId, email, role };
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwt.signAsync(payload, {
-        secret: this.config.get<string>('JWT_SECRET'),
-        expiresIn: this.config.get<string>('JWT_ACC_EXPIRATION'),
-      }),
-      this.jwt.signAsync(payload, {
-        secret: this.config.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: this.config.get<string>('JWT_REF_EXPIRATION'),
-      }),
-    ]);
-    return { accessToken, refreshToken };
+  async logout(userId: string) {
+    await this.usersService.updateRefreshToken(userId, null);
+    return { message: 'Logged out successfully' };
   }
 
-  // Generate & email OTP
+  /* =======================
+   * Change Password (auth)
+   * ======================= */
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'User not found',
+      });
+    }
+
+    const match = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!match) {
+      throw new UnauthorizedException({
+        statusCode: HttpStatus.UNAUTHORIZED,
+        message: 'Current password is incorrect',
+      });
+    }
+
+    if (dto.currentPassword === dto.newPassword) {
+      throw new BadRequestException({
+        statusCode: HttpStatus.BAD_REQUEST,
+        message: 'New password must be different from current password',
+      });
+    }
+
+    user.password = await bcrypt.hash(dto.newPassword, 10);
+    user.refreshToken = null; // revoke all sessions
+    await user.save();
+
+    try {
+      await this.mailService.sendEmail(
+        user.email,
+        'Your password was changed',
+        'Your password has been updated. If this wasn’t you, reset it immediately and contact support.',
+      );
+    } catch {
+      // do not block on email failure
+    }
+
+    return { message: 'Password changed' };
+  }
+
+  /* =======================
+   * Password Reset (OTP + Reset Token)
+   * ======================= */
   async forgotPassword(dto: ForgotPasswordDto) {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
@@ -202,9 +356,8 @@ export class AuthService {
       });
     }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const hash = await bcrypt.hash(code, 10);
-    user.resetPasswordCodeHash = hash;
+    const code = this.generateCode();
+    user.resetPasswordCodeHash = await bcrypt.hash(code, 10);
     user.resetPasswordExpires = new Date(Date.now() + this.otpExpiryMs);
     await user.save();
 
@@ -212,7 +365,7 @@ export class AuthService {
     return { message: 'OTP sent to your email' };
   }
 
-  // Verify OTP & issue resetToken
+  // Verify reset OTP → returns a short-lived reset token
   async verifyOtp(dto: VerifyOtpDto) {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user || !user.resetPasswordCodeHash || !user.resetPasswordExpires) {
@@ -240,14 +393,14 @@ export class AuthService {
       });
     }
 
-    // Issue a JWT scoped for password reset
     const payload = { sub: user.id, email: user.email };
     const resetToken = await this.jwt.signAsync(payload, {
       secret: this.config.get<string>('JWT_RESET_SECRET'),
+      // keep expiry short; if you want different duration, add JWT_RESET_EXPIRATION in env
       expiresIn: this.config.get<string>('JWT_ACC_EXPIRATION'),
     });
 
-    // clear OTP fields now or after reset
+    // Clear OTP so it can’t be reused
     user.resetPasswordCodeHash = null;
     user.resetPasswordExpires = null;
     await user.save();
@@ -255,14 +408,13 @@ export class AuthService {
     return { resetToken };
   }
 
-  // Reset password using resetToken
   async resetPassword(dto: ResetPasswordDto) {
     let payload: any;
     try {
       payload = await this.jwt.verifyAsync(dto.resetToken, {
         secret: this.config.get<string>('JWT_RESET_SECRET'),
       });
-    } catch (err) {
+    } catch {
       throw new BadRequestException({
         statusCode: HttpStatus.BAD_REQUEST,
         message:
@@ -289,7 +441,7 @@ export class AuthService {
     }
 
     user.password = await bcrypt.hash(dto.newPassword, 10);
-    user.refreshToken = null;
+    user.refreshToken = null; // revoke sessions
     await user.save();
 
     return { message: 'Password reset successful' };
