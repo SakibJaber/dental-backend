@@ -95,7 +95,7 @@ export class AuthService {
       ...dto,
       password: passwordHash,
       imageUrl,
-      status: UserStatus.PENDING,
+      status: UserStatus.APPROVED,
       isVerified: false,
     });
 
@@ -109,7 +109,9 @@ export class AuthService {
     try {
       await this.mailService.sendEmailVerificationOtp(user.email, code);
     } catch (err) {
-      // optionally log: throw new InternalServerErrorException('Failed to send verification email');
+      throw new InternalServerErrorException(
+        'Failed to send verification email',
+      );
     }
 
     // Notify admins about new signup

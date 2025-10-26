@@ -13,7 +13,11 @@ export class CheckoutController {
     const userId = req.user.userId;
     const order = await this.ordersService.findOne(orderId);
 
-    if (order.user.toString() !== userId) {
+    // Handle both populated user object and user ID string
+    const orderUserId =
+      (order.user as any)?._id?.toString?.() ?? order.user.toString();
+
+    if (orderUserId !== userId) {
       throw new NotFoundException('Order not found');
     }
 
@@ -30,7 +34,11 @@ export class CheckoutController {
     const userId = req.user.userId;
     const order = await this.ordersService.findOne(orderId);
 
-    if (order.user.toString() !== userId) {
+    // Handle both populated user object and user ID string
+    const orderUserId =
+      (order.user as any)?._id?.toString?.() ?? order.user.toString();
+
+    if (orderUserId !== userId) {
       throw new NotFoundException('Order not found');
     }
 

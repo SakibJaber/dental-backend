@@ -1,10 +1,19 @@
-import { IsEmail, IsNumber, Length } from 'class-validator';
+import { Transform } from 'class-transformer';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  Length,
+} from 'class-validator';
 
 export class VerifyOtpDto {
   @IsEmail()
+  @IsNotEmpty()
   email: string;
 
-  @IsNumber()
-  @Length(6, 6)
-  code: number;
+  @Transform(({ value }) => value.toString())
+  @IsString()
+  @Length(6, 6, { message: 'Code must be exactly 6 characters' })
+  code: string;
 }

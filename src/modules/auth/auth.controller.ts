@@ -34,7 +34,7 @@ export class AuthController {
     const result = await this.authService.signup(dto, file);
     return {
       statusCode: HttpStatus.CREATED,
-      message: 'Account created successfully, pending approval',
+      message: 'Account created successfully,',
       data: result,
     };
   }

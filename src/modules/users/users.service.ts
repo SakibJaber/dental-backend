@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
+  HttpStatus,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -11,6 +13,8 @@ import { Address, AddressDocument } from 'src/modules/address/address.schema';
 import { FileUploadService } from 'src/modules/file-upload/file-upload.service';
 import { NotificationService } from 'src/modules/notification/notification.service';
 import { User, UserDocument } from 'src/modules/users/schema/user.schema';
+import { UpdateProfileDto } from 'src/modules/users/dto/update-profile.dto';
+import { UpdateUserDto } from 'src/modules/users/dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -36,11 +40,18 @@ export class UsersService {
 
   // Find user by ID
   async findById(id: string): Promise<UserDocument | null> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid user ID');
+    }
     return await this.userModel.findById(id).exec();
   }
 
   // Find user by ID with addresses
   async findByIdWithAddresses(id: string): Promise<any> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
     const user = await this.userModel
       .findById(id)
       .select('-password -refreshToken')
@@ -50,7 +61,8 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    // Find addresses for the user with lean() to improve performance
+
+    // Find addresses for the user
     const addresses = await this.addressModel
       .find({ userId: id })
       .lean()
@@ -87,7 +99,9 @@ export class UsersService {
     const [users, total] = await Promise.all([
       this.userModel
         .find(query)
-        .select('-password -refreshToken')
+        .select(
+          '-password -refreshToken -emailVerificationCodeHash -resetPasswordCodeHash',
+        )
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -106,7 +120,9 @@ export class UsersService {
   async findByRole(role: Role): Promise<UserDocument[]> {
     return await this.userModel
       .find({ role })
-      .select('-password -refreshToken')
+      .select(
+        '-password -refreshToken -emailVerificationCodeHash -resetPasswordCodeHash',
+      )
       .exec();
   }
 
@@ -114,7 +130,9 @@ export class UsersService {
   async findByStatus(status: UserStatus): Promise<UserDocument[]> {
     return await this.userModel
       .find({ status })
-      .select('-password -refreshToken')
+      .select(
+        '-password -refreshToken -emailVerificationCodeHash -resetPasswordCodeHash',
+      )
       .exec();
   }
 
@@ -132,65 +150,90 @@ export class UsersService {
     const user = new this.userModel(data);
     const savedUser = await user.save();
 
-    const admins = await this.userModel.find({ role: Role.ADMIN }).exec();
-    await Promise.all(
-      admins.map((admin) =>
-        this.notificationService.createNotification({
-          title: 'New User Registration',
-          body: `${data.email} has registered as ${data.role}`,
-          user: admin.id.toString(),
-          metadata: { signup: true, newUserId: savedUser._id },
-        }),
-      ),
-    );
+    // Notify admins about new registration
+    try {
+      const admins = await this.userModel.find({ role: Role.ADMIN }).exec();
+      await Promise.all(
+        admins.map((admin) =>
+          this.notificationService.createNotification({
+            title: 'New User Registration',
+            body: `${data.email} has registered as ${data.role}`,
+            user: admin.id.toString(),
+            metadata: { signup: true, newUserId: savedUser._id },
+          }),
+        ),
+      );
+    } catch (error) {
+      // Log error but don't fail user creation
+      console.error('Failed to send admin notifications:', error);
+    }
 
     return savedUser;
   }
 
+  // Update own profile (for regular users)
   async updateOwnProfile(
     userId: string,
-    dto: Partial<
-      Pick<
-        User,
-        'firstName' | 'lastName' | 'phone' | 'gdcNumber' | 'clinicName'
-      >
-    >,
+    dto: UpdateProfileDto,
     file?: Express.Multer.File,
   ): Promise<any> {
     const user = await this.userModel.findById(userId);
     if (!user) throw new NotFoundException('User not found');
 
-    // Prevent changing restricted fields through this endpoint
-    const allowed = ['firstName', 'lastName', 'phone', 'gdcNumber', 'clinicName']
-      .reduce((obj, key) => (key in dto ? { ...obj, [key]: dto[key as keyof typeof dto] } : obj), {});
+    // Only allow specific fields for own profile update
+    const allowedUpdates = {
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      phone: dto.phone,
+      gdcNumber: dto.gdcNumber,
+      clinicName: dto.clinicName,
+    };
+
+    // Remove undefined fields
+    Object.keys(allowedUpdates).forEach((key) => {
+      if (allowedUpdates[key] === undefined) {
+        delete allowedUpdates[key];
+      }
+    });
 
     if (file) {
       const imageUrl = await this.fileUploadService.handleUpload(file);
-      allowed['imageUrl'] = imageUrl;
+      allowedUpdates['imageUrl'] = imageUrl;
     }
 
-    Object.assign(user, allowed);
+    Object.assign(user, allowedUpdates);
     await user.save();
 
-    // sanitize output
-    const { password, refreshToken, ...safe } = user.toObject({
+    // Sanitize output
+    const {
+      password,
+      refreshToken,
+      emailVerificationCodeHash,
+      resetPasswordCodeHash,
+      ...safe
+    } = user.toObject({
       getters: true,
       virtuals: false,
     });
     return safe;
   }
- 
-  // Update user profile
+
+  // Update user (for admin or own profile)
   async updateUser(
     id: string,
-    updateData: Partial<User>,
-  ): Promise<UserDocument> {
-    const user = await this.userModel.findById(id);
+    updateData: UpdateUserDto,
+    file?: Express.Multer.File,
+  ): Promise<any> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid user ID');
+    }
 
+    const user = await this.userModel.findById(id);
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
+    // Check email uniqueness if email is being updated
     if (updateData.email && updateData.email !== user.email) {
       const existingUser = await this.findByEmail(updateData.email);
       if (existingUser) {
@@ -198,48 +241,189 @@ export class UsersService {
       }
     }
 
+    // Handle file upload if provided
+    if (file) {
+      const imageUrl = await this.fileUploadService.handleUpload(file);
+      updateData.imageUrl = imageUrl;
+    }
+
     Object.assign(user, updateData);
-    return await user.save();
+    await user.save();
+
+    // Sanitize output
+    const {
+      password,
+      refreshToken,
+      emailVerificationCodeHash,
+      resetPasswordCodeHash,
+      ...safe
+    } = user.toObject({
+      getters: true,
+      virtuals: false,
+    });
+    return safe;
   }
 
-  // Update user status
-  async updateStatus(
+  async toggleBlockUser(
     id: string,
-    status: UserStatus,
-  ): Promise<{ message: string; user: UserDocument }> {
+  ): Promise<{ message: string; user: any; action: 'blocked' | 'unblocked' }> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
     const user = await this.userModel.findById(id);
     if (!user) throw new NotFoundException('User not found');
 
+    const previousStatus = user.status;
+    let newStatus: UserStatus;
+    let action: 'blocked' | 'unblocked';
+
+    // Toggle between BLOCKED and APPROVED
+    if (user.status === UserStatus.BLOCKED) {
+      newStatus = UserStatus.APPROVED;
+      action = 'unblocked';
+    } else {
+      newStatus = UserStatus.BLOCKED;
+      action = 'blocked';
+    }
+
+    user.status = newStatus;
+
+    // Clear refresh token and sessions if blocking user
+    if (action === 'blocked') {
+      user.refreshToken = null;
+    }
+
+    await user.save();
+
+    // Send notification to the user
+    try {
+      await this.notificationService.createNotification({
+        title: `Account ${action === 'blocked' ? 'Blocked' : 'Unblocked'}`,
+        body:
+          action === 'blocked'
+            ? 'Your account has been blocked. Please contact administrator for more information.'
+            : 'Your account has been unblocked. You can now access all features.',
+        user: user.id.toString(),
+        metadata: { previousStatus, newStatus, action },
+      });
+    } catch (error) {
+      console.error('Failed to send user notification:', error);
+    }
+
+    // Notify admins about status change
+    try {
+      const admins = await this.userModel.find({ role: Role.ADMIN }).exec();
+      await Promise.all(
+        admins.map((admin) =>
+          this.notificationService.createNotification({
+            title: `User ${action === 'blocked' ? 'Blocked' : 'Unblocked'}`,
+            body: `User ${user.email} has been ${action}.`,
+            user: admin.id.toString(),
+            metadata: {
+              changedUserId: user._id,
+              previousStatus,
+              newStatus,
+              action,
+              userEmail: user.email,
+            },
+          }),
+        ),
+      );
+    } catch (error) {
+      console.error('Failed to send admin notifications:', error);
+    }
+
+    // Sanitize user for response
+    const {
+      password,
+      refreshToken,
+      emailVerificationCodeHash,
+      resetPasswordCodeHash,
+      ...safeUser
+    } = user.toObject({
+      getters: true,
+      virtuals: false,
+    });
+
+    return {
+      message: `User ${action} successfully`,
+      user: safeUser,
+      action,
+    };
+  }
+
+  // Update user status with enhanced logic
+  async updateStatus(
+    id: string,
+    status: UserStatus,
+  ): Promise<{ message: string; user: any }> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
+    const user = await this.userModel.findById(id);
+    if (!user) throw new NotFoundException('User not found');
+
+    const previousStatus = user.status;
     user.status = status;
 
+    // Clear refresh token and sessions if user is blocked or rejected
     if (status === UserStatus.BLOCKED || status === UserStatus.REJECTED) {
       user.refreshToken = null;
     }
 
     await user.save();
 
-    await this.notificationService.createNotification({
-      title: 'Account Status Updated',
-      body: `Your account status has been updated to "${status}"`,
-      user: user.id.toString(),
-      metadata: { status },
+    // Send notification to the user
+    try {
+      await this.notificationService.createNotification({
+        title: 'Account Status Updated',
+        body: `Your account status has been updated from ${previousStatus} to ${status}`,
+        user: user.id.toString(),
+        metadata: { previousStatus, newStatus: status },
+      });
+    } catch (error) {
+      console.error('Failed to send user notification:', error);
+    }
+
+    // Notify admins about status change
+    try {
+      const admins = await this.userModel.find({ role: Role.ADMIN }).exec();
+      await Promise.all(
+        admins.map((admin) =>
+          this.notificationService.createNotification({
+            title: `User Status Changed`,
+            body: `User ${user.email} status changed from ${previousStatus} to ${status.toLowerCase()}.`,
+            user: admin.id.toString(),
+            metadata: {
+              changedUserId: user._id,
+              previousStatus,
+              newStatus: status,
+              userEmail: user.email,
+            },
+          }),
+        ),
+      );
+    } catch (error) {
+      console.error('Failed to send admin notifications:', error);
+    }
+
+    // Sanitize user for response
+    const {
+      password,
+      refreshToken,
+      emailVerificationCodeHash,
+      resetPasswordCodeHash,
+      ...safeUser
+    } = user.toObject({
+      getters: true,
+      virtuals: false,
     });
 
-    const admins = await this.userModel.find({ role: Role.ADMIN }).exec();
-    await Promise.all(
-      admins.map((admin) =>
-        this.notificationService.createNotification({
-          title: `User ${status}`,
-          body: `User ${user.email} (${user._id}) status changed to ${status.toLowerCase()}.`,
-          user: admin.id.toString(),
-          metadata: { changedUserId: user._id, newStatus: status },
-        }),
-      ),
-    );
-
     return {
-      message: `User status updated to ${status}`,
-      user: await this.userModel.findById(id).select('-password -refreshToken'),
+      message: `User status updated from ${previousStatus} to ${status}`,
+      user: safeUser,
     };
   }
 
@@ -261,12 +445,39 @@ export class UsersService {
     return user;
   }
 
-  // Delete user
+  // Delete user with enhanced cleanup
   async deleteUser(id: string): Promise<{ message: string }> {
-    const result = await this.userModel.findByIdAndDelete(id);
-    if (!result) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
+    const user = await this.userModel.findById(id);
+    if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    // Optional: Add any cleanup logic here (delete related addresses, etc.)
+    // await this.addressModel.deleteMany({ userId: id });
+
+    await this.userModel.findByIdAndDelete(id);
+
+    // Notify admins about user deletion
+    try {
+      const admins = await this.userModel.find({ role: Role.ADMIN }).exec();
+      await Promise.all(
+        admins.map((admin) =>
+          this.notificationService.createNotification({
+            title: 'User Deleted',
+            body: `User ${user.email} has been deleted from the system.`,
+            user: admin.id.toString(),
+            metadata: { deletedUserId: id, userEmail: user.email },
+          }),
+        ),
+      );
+    } catch (error) {
+      console.error('Failed to send deletion notifications:', error);
+    }
+
     return { message: 'User deleted successfully' };
   }
 
@@ -275,8 +486,12 @@ export class UsersService {
     total: number;
     byRole: Record<Role, number>;
     byStatus: Record<UserStatus, number>;
+    recentRegistrations: number;
   }> {
-    const [total, byRole, byStatus] = await Promise.all([
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+    const [total, byRole, byStatus, recentRegistrations] = await Promise.all([
       this.userModel.countDocuments(),
       this.userModel.aggregate([
         { $group: { _id: '$role', count: { $sum: 1 } } },
@@ -284,6 +499,7 @@ export class UsersService {
       this.userModel.aggregate([
         { $group: { _id: '$status', count: { $sum: 1 } } },
       ]),
+      this.userModel.countDocuments({ createdAt: { $gte: oneWeekAgo } }),
     ]);
 
     const roleStats = byRole.reduce(
@@ -302,6 +518,11 @@ export class UsersService {
       {} as Record<UserStatus, number>,
     );
 
-    return { total, byRole: roleStats, byStatus: statusStats };
+    return {
+      total,
+      byRole: roleStats,
+      byStatus: statusStats,
+      recentRegistrations,
+    };
   }
 }

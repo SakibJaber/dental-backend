@@ -1,3 +1,4 @@
+// src/modules/order/order.controller.ts
 import {
   Controller,
   Post,
@@ -48,6 +49,11 @@ export class OrdersController {
   ) {
     const userId = req.user.userId;
 
+    // Validate payment method - only Stripe is allowed now
+    if (createOrderDto.paymentMethod !== PaymentMethod.STRIPE) {
+      throw new BadRequestException('Only Stripe payments are accepted');
+    }
+
     // Prioritize header > body > generate
     const idempotencyKey =
       headerKey || createOrderDto.idempotencyKey || uuidv4();
@@ -56,71 +62,41 @@ export class OrdersController {
     // Validate and get cart contents
     const cart = await this.cartService.validateCartForCheckout(userId);
 
-    // Override DTO products with validated cart items for security
-    createOrderDto.products = cart.items
-      .filter(item => item.product !== null) // Filter out any null products
-      .map((item) => {
-        // We've already filtered out null products, so we can safely use non-null assertion here
-        const product = item.product!;
-        return {
-          product: product._id.toString(),
-          name: product.name,
-          price: product.price,
-          quantity: item.quantity,
-          image: Array.isArray(product.imageUrl)
-            ? product.imageUrl[0]
-            : product.imageUrl,
-        };
-      });
+    // Create order with cart items
+    const order = await this.ordersService.create(
+      userId, 
+      createOrderDto, 
+      cart.items.filter(item => item.product !== null)
+    );
 
-    // Recalculate totals server-side based on cart
-    createOrderDto.subtotal = cart.items
-      .filter(item => item.product !== null) // Filter out any null products
-      .reduce(
-        (sum, item) => sum + item.product!.price * item.quantity,
-        0,
-      );
-    createOrderDto.total = createOrderDto.subtotal;
+    // Create Stripe checkout session
+    const frontendUrl = this.configService.get<string>('BASE_URL');
+    const successUrl = `${frontendUrl}/checkout/success?orderId=${order._id}`;
+    const cancelUrl = `${frontendUrl}/checkout/cancel?orderId=${order._id}`;
 
-    // Create order (validation already done here)
-    const order = await this.ordersService.create(userId, createOrderDto);
-
-    // Handle Stripe payment
-    if (createOrderDto.paymentMethod === PaymentMethod.STRIPE) {
-      const frontendUrl = this.configService.get<string>('BASE_URL');
-      const successUrl = `${frontendUrl}/checkout/success?orderId=${order._id}`;
-      const cancelUrl = `${frontendUrl}/checkout/cancel?orderId=${order._id}`;
-
-      const session = await this.stripeService.createCheckoutSession({
-        orderId: (order._id as string).toString(),
-        products: createOrderDto.products.map((p) => ({
-          name: p.name,
-          price: p.price,
-          quantity: p.quantity,
-        })),
-        customerEmail: req.user.email,
-        successUrl,
-        cancelUrl,
-      });
-
-      return {
-        statusCode: HttpStatus.CREATED,
-        message: 'Order placed successfully. Payment required.',
-        data: {
-          order,
-          payment: {
-            type: 'stripe',
-            sessionId: session.id,
-            url: session.url,
-          },
-        },
-      };
-    }
+    const session = await this.stripeService.createCheckoutSession({
+      orderId: (order._id as string).toString(),
+      products: order.products.map((p) => ({
+        name: p.name,
+        price: p.price,
+        quantity: p.quantity,
+      })),
+      customerEmail: req.user.email,
+      successUrl,
+      cancelUrl,
+    });
 
     return {
-      statusCode: 201,
-      message: 'Order placed successfully',
-      data: order,
+      statusCode: HttpStatus.CREATED,
+      message: 'Order placed successfully. Payment required.',
+      data: {
+        order,
+        payment: {
+          type: 'stripe',
+          sessionId: session.id,
+          url: session.url,
+        },
+      },
     };
   }
 
@@ -189,6 +165,20 @@ export class OrdersController {
     @Param('id') id: string,
     @Body() updateOrderStatusDto: UpdateOrderStatusDto,
   ) {
+    // Validate status - remove refunded from allowed statuses
+    const allowedStatuses = [
+      OrderStatus.PENDING,
+      OrderStatus.CONFIRMED,
+      OrderStatus.PROCESSING,
+      OrderStatus.SHIPPED,
+      OrderStatus.DELIVERED,
+      OrderStatus.CANCELLED,
+    ];
+    
+    if (!allowedStatuses.includes(updateOrderStatusDto.status)) {
+      throw new BadRequestException('Invalid order status');
+    }
+
     const order = await this.ordersService.updateStatus(
       id,
       updateOrderStatusDto,
@@ -208,14 +198,6 @@ export class OrdersController {
     const ownerId =
       (order.user as any)?._id?.toString?.() ?? order.user.toString();
     if (ownerId !== userId) throw new NotFoundException('Order not found');
-
-    if (order.user.toString() !== userId) {
-      throw new NotFoundException('Order not found');
-    }
-
-    if (order.paymentMethod !== PaymentMethod.STRIPE) {
-      throw new BadRequestException('Invalid payment method for retry');
-    }
 
     if (order.paymentStatus === PaymentStatus.SUCCEEDED) {
       throw new ConflictException('Payment already succeeded');

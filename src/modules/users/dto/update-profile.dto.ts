@@ -1,28 +1,23 @@
-import { IsOptional, IsString, IsPhoneNumber, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsPhoneNumber, IsEmail } from 'class-validator';
 
 export class UpdateProfileDto {
-  @IsOptional()
   @IsString()
-  @MaxLength(60)
+  @IsOptional()
   firstName?: string;
 
-  @IsOptional()
   @IsString()
-  @MaxLength(60)
+  @IsOptional()
   lastName?: string;
 
+  @IsPhoneNumber()
   @IsOptional()
-  @IsPhoneNumber('GB', { message: 'Provide a valid phone number (E.164 preferred)' })
   phone?: string;
 
-  @IsOptional()
   @IsString()
-  @MaxLength(60)
+  @IsOptional()
   gdcNumber?: string;
 
-  @IsOptional()
   @IsString()
-  @MaxLength(120)
+  @IsOptional()
   clinicName?: string;
-
 }

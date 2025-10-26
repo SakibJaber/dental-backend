@@ -1,4 +1,4 @@
-// CreateOrderDto
+// src/modules/order/dto/create-order.dto.ts
 import {
   IsMongoId,
   IsString,
@@ -33,15 +33,10 @@ export class CreateOrderDto {
   @IsMongoId()
   addressId: string;
 
-  @ValidateNested({ each: true })
-  @IsArray()
-  @IsOptional()
-  products?: OrderProductDto[];
-
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
 
-  // Server-calculated
+  // Server-calculated fields
   @IsNumber()
   @IsOptional()
   subtotal?: number;

@@ -1,3 +1,4 @@
+// src/modules/order/order.service.ts
 import {
   BadRequestException,
   Injectable,
@@ -30,7 +31,7 @@ export class OrderService {
     private readonly notificationService: NotificationService,
   ) {}
 
-  async create(userId: string, dto: CreateOrderDto) {
+  async create(userId: string, dto: CreateOrderDto, cartItems: any[]) {
     // Idempotency check
     const existingOrder = await this.orderModel.findOne({
       idempotencyKey: dto.idempotencyKey,
@@ -44,21 +45,40 @@ export class OrderService {
     });
     if (!address) throw new BadRequestException('Invalid address');
 
-    // Validate products and stock
-    await this.validateProducts(dto.products ?? []);
+    // Prepare products from cart items
+    const products = cartItems.map((item) => {
+      const product = item.product!;
+      return {
+        product: product._id.toString(),
+        name: product.name,
+        price: product.price,
+        quantity: item.quantity,
+        image:
+          Array.isArray(product.images) && product.images.length > 0
+            ? product.images[0]
+            : '',
+      };
+    });
 
-    // Create order
+    // Calculate totals
+    const subtotal = cartItems.reduce(
+      (sum, item) => sum + item.product!.price * item.quantity,
+      0,
+    );
+    const total = subtotal;
+
+    // Validate products and stock
+    await this.validateProducts(products);
+
+    // Create order - payment status is always PENDING for Stripe
     const order = new this.orderModel({
       user: new Types.ObjectId(userId),
-      products: dto.products,
+      products,
       address: new Types.ObjectId(dto.addressId),
-      paymentMethod: dto.paymentMethod,
-      paymentStatus:
-        dto.paymentMethod === PaymentMethod.CASH_ON_DELIVERY
-          ? PaymentStatus.SUCCEEDED
-          : PaymentStatus.PENDING,
-      subtotal: dto.subtotal,
-      total: dto.total,
+      paymentMethod: PaymentMethod.STRIPE, // Only Stripe now
+      paymentStatus: PaymentStatus.PENDING,
+      subtotal,
+      total,
       status: OrderStatus.PENDING,
       idempotencyKey: dto.idempotencyKey,
     });
@@ -66,7 +86,7 @@ export class OrderService {
     const savedOrder = await order.save();
 
     // Update product stock
-    await this.updateProductStock(dto.products ?? [], 'decrement');
+    await this.updateProductStock(products, 'decrement');
 
     // Clear cart
     await this.clearUserCart(userId);
@@ -101,7 +121,23 @@ export class OrderService {
           ? { $inc: { stock: -item.quantity } }
           : { $inc: { stock: item.quantity } };
 
-      await this.productModel.findByIdAndUpdate(item.product, update);
+      const updatedProduct = await this.productModel.findByIdAndUpdate(
+        item.product,
+        update,
+        { new: true },
+      );
+
+      // Update product availability based on new stock
+      if (updatedProduct) {
+        const availability =
+          updatedProduct.stock > 0
+            ? ProductAvailability.IN_STOCK
+            : ProductAvailability.OUT_OF_STOCK;
+
+        await this.productModel.findByIdAndUpdate(item.product, {
+          availability,
+        });
+      }
     }
   }
 
@@ -147,7 +183,6 @@ export class OrderService {
     if (status) query.status = status;
     if (userId) query.user = new Types.ObjectId(userId);
     if (search) {
-      // Basic search implementation (e.g., by order ID or user name; expand as needed)
       query.$or = [
         { _id: search },
         { 'user.name': { $regex: search, $options: 'i' } },
@@ -183,7 +218,7 @@ export class OrderService {
     const order = await this.orderModel
       .findById(id)
       .populate('user', 'name email')
-      .populate('products.product', 'name price imageUrl')
+      .populate('products.product', 'name price images')
       .populate('address');
     if (!order) throw new NotFoundException('Order not found');
     return order;
@@ -193,6 +228,11 @@ export class OrderService {
     id: string,
     updateOrderStatusDto: UpdateOrderStatusDto,
   ): Promise<Order> {
+    // Prevent updating to refunded status
+    if (updateOrderStatusDto.status === OrderStatus.REFUNDED) {
+      throw new BadRequestException('Refund status is not supported');
+    }
+
     const order = await this.orderModel
       .findByIdAndUpdate(
         id,

@@ -42,13 +42,13 @@ export class CartService {
 
     if (existingItemIndex > -1) {
       const newQuantity = cart.items[existingItemIndex].quantity + dto.quantity;
-      if (newQuantity > 10) {
-        throw new ConflictException('Maximum quantity per product is 10');
+      if (newQuantity > 50) {
+        throw new ConflictException('Maximum quantity per product is 50');
       }
       cart.items[existingItemIndex].quantity = newQuantity;
     } else {
-      if (cart.items.length >= 20) {
-        throw new ConflictException('Cart cannot contain more than 20 items');
+      if (cart.items.length >= 100) {
+        throw new ConflictException('Cart cannot contain more than 100 items');
       }
       cart.items.push({
         product: new Types.ObjectId(dto.productId),
@@ -64,7 +64,7 @@ export class CartService {
       .findOne({ user: new Types.ObjectId(userId) })
       .populate<{ items: { product: PopulatedProduct | null; quantity: number }[] }>(
         'items.product',
-        'name price imageUrl availability',
+        'name price images availability',
       )
       .lean();
 
@@ -93,8 +93,8 @@ export class CartService {
   }
 
   async updateCartItem(userId: string, productId: string, quantity: number) {
-    if (quantity < 1 || quantity > 10) {
-      throw new ConflictException('Quantity must be between 1 and 10');
+    if (quantity < 1 || quantity > 50) {
+      throw new ConflictException('Quantity must be between 1 and 50');
     }
 
     const cart = await this.cartModel.findOne({

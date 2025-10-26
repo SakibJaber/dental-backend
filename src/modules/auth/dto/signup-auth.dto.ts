@@ -23,7 +23,7 @@ export class SignupAuthDto {
   @IsString()
   lastName: string;
 
-  @IsNumber()
+  @IsString()
   @IsNotEmpty()
   gdcNo: string;
 }
