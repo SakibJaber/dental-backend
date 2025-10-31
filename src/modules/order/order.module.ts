@@ -1,4 +1,9 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Order, OrderSchema } from './order.schema';
 import { OrdersController } from 'src/modules/order/order.controller';
@@ -22,8 +27,4 @@ import { StripeService } from 'src/modules/order/stripe.service';
   providers: [OrderService, StripeService],
   exports: [OrderService, StripeService],
 })
-export class OrderModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(express.raw()).forRoutes('webhook/stripe'); // Applies raw body middleware for Stripe webhook
-  }
-}
+export class OrderModule {}

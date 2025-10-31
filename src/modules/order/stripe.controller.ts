@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  Body,
 } from '@nestjs/common';
 import Stripe from 'stripe';
 import { OrderService } from './order.service';
@@ -27,7 +28,7 @@ export class StripeWebhookController {
     @Req() req,
     @Headers('stripe-signature') signature: string,
   ) {
-    const payload = req.rawBody;
+    const payload = req.body;
     if (!payload || payload.length === 0) {
       this.logger.error('Empty webhook body received');
       return { received: false };
@@ -38,18 +39,20 @@ export class StripeWebhookController {
       this.logger.log(`Stripe event received: ${event.type} (ID: ${event.id})`);
 
       switch (event.type) {
-        case 'checkout.session.completed':
-          await this.handleCheckoutSessionCompleted(event.data.object);
+        case 'checkout.session.completed': {
+          const session = event.data.object as Stripe.Checkout.Session;
+          this.logger.log(
+            `Session completed for order ${session.client_reference_id}`,
+          );
+          await this.handleCheckoutSessionCompleted(session);
           break;
-        case 'checkout.session.expired':
-          await this.handleCheckoutSessionExpired(event.data.object);
+        }
+        case 'payment_intent.succeeded': {
+          const pi = event.data.object as Stripe.PaymentIntent;
+          this.logger.log(`PaymentIntent succeeded: ${pi.metadata?.orderId}`);
+          await this.handlePaymentIntentSucceeded(pi);
           break;
-        case 'payment_intent.succeeded':
-          await this.handlePaymentIntentSucceeded(event.data.object);
-          break;
-        case 'payment_intent.payment_failed':
-          await this.handlePaymentIntentFailed(event.data.object);
-          break;
+        }
         default:
           this.logger.log(`Unhandled event type: ${event.type}`);
       }
@@ -61,7 +64,9 @@ export class StripeWebhookController {
     }
   }
 
-  private async handleCheckoutSessionCompleted(session: Stripe.Checkout.Session) {
+  private async handleCheckoutSessionCompleted(
+    session: Stripe.Checkout.Session,
+  ) {
     const orderId = session.client_reference_id || session.metadata?.orderId;
     if (!orderId) {
       this.logger.warn('Missing order ID in Stripe session');
@@ -86,7 +91,9 @@ export class StripeWebhookController {
     }
     // Cancel order and restore stock
     await this.ordersService.updatePaymentStatus(orderId, PaymentStatus.FAILED);
-    this.logger.log(`Session expired for order ${orderId}; order cancelled and stock restored`);
+    this.logger.log(
+      `Session expired for order ${orderId}; order cancelled and stock restored`,
+    );
   }
 
   private async handlePaymentIntentSucceeded(
@@ -103,9 +110,7 @@ export class StripeWebhookController {
     this.logger.log(`Payment intent succeeded for order ${orderId}`);
   }
 
-  private async handlePaymentIntentFailed(
-    paymentIntent: Stripe.PaymentIntent,
-  ) {
+  private async handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent) {
     const orderId = paymentIntent.metadata?.orderId;
     if (!orderId) return;
 
@@ -114,6 +119,9 @@ export class StripeWebhookController {
       PaymentStatus.FAILED,
       paymentIntent.id,
     );
-    this.logger.error(`Payment failed for order ${orderId}: ${paymentIntent.last_payment_error?.message}`);
+    this.logger.error(
+      `Payment failed for order ${orderId}: ${paymentIntent.last_payment_error?.message}`,
+    );
   }
 }
+// stripe listen --api-key sk_test_51RsGR6Kmt7BMEjHEdCsLVq1y2VhBHQkcGHDaNnvrjUg85uE5IxlFB4kP2DEH65UrsAJIGSNipS7L2IKA5tHArj2q00PZvUl39o --forward-to http://localhost:3045/api/webhook/stripe

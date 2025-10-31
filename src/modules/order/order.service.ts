@@ -1,4 +1,4 @@
-// src/modules/order/order.service.ts
+
 import {
   BadRequestException,
   Injectable,
@@ -19,6 +19,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { UpdateOrderStatusDto } from 'src/modules/order/dto/update-order.dto';
 import { Product } from 'src/modules/products/schema/product.schema';
 import { ProductAvailability } from 'src/common/enum/product-availability.enum';
+import { PopulatedOrderProduct } from 'src/modules/order/types/populatedOrderProduct.types';
 
 @Injectable()
 export class OrderService {
@@ -182,29 +183,85 @@ export class OrderService {
     const query: any = {};
     if (status) query.status = status;
     if (userId) query.user = new Types.ObjectId(userId);
-    if (search) {
+    if (search && search.trim() !== '') {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  
+      // If search looks like ObjectId or UUID, try matching _id directly
+      const isObjectId = Types.ObjectId.isValid(search);
+      const idMatch = isObjectId ? [{ _id: new Types.ObjectId(search) }] : [];
+  
       query.$or = [
-        { _id: search },
-        { 'user.name': { $regex: search, $options: 'i' } },
+        ...idMatch,
+        { 'user.firstName': { $regex: escaped, $options: 'i' } },
+        { 'user.lastName': { $regex: escaped, $options: 'i' } },
+        { 'user.email': { $regex: escaped, $options: 'i' } },
+        { 'products.name': { $regex: escaped, $options: 'i' } },
       ];
     }
-
+  
     const skip = (page - 1) * limit;
+  
     const [orders, total] = await Promise.all([
       this.orderModel
         .find(query)
         .skip(skip)
         .limit(limit)
-        .populate('user', 'name email')
-        .populate('products.product', 'name')
-        .populate('address')
+        .populate([
+          {
+            path: 'user',
+            select: 'firstName lastName email imageUrl',
+          },
+          {
+            path: 'address',
+            select:
+              'streetNo city state postalCode country type recipientFirstName recipientLastName recipientEmail',
+          },
+          {
+            path: 'products.product',
+            select: 'name price stock images availability',
+          },
+        ])
         .sort({ createdAt: -1 })
+        .lean()
         .exec(),
       this.orderModel.countDocuments(query),
     ]);
-
+  
+    // --- Format response ---
+    const formattedOrders = orders.map((order) => ({
+      ...order,
+      products: (order.products as any[]).map((item: any) => {
+        const isPopulated =
+          item.product &&
+          typeof item.product === 'object' &&
+          '_id' in item.product;
+  
+        const productData = isPopulated ? item.product : null;
+  
+        return {
+          orderLineId: item._id, // subdocument ID
+          quantity: item.quantity,
+          snapshot: {
+            name: item.name,
+            price: item.price,
+            image: item.image,
+          },
+          product: productData
+            ? {
+                id: productData._id,
+                name: productData.name,
+                price: productData.price,
+                stock: productData.stock,
+                images: productData.images,
+                availability: productData.availability,
+              }
+            : null,
+        };
+      }),
+    }));
+  
     return {
-      data: orders,
+      data: formattedOrders,
       meta: {
         total,
         page,
@@ -213,25 +270,73 @@ export class OrderService {
       },
     };
   }
-
-  async findOne(id: string): Promise<Order> {
+  
+  async findOne(id: string): Promise<any> {
     const order = await this.orderModel
       .findById(id)
-      .populate('user', 'name email')
-      .populate('products.product', 'name price images')
-      .populate('address');
+      .populate([
+        {
+          path: 'user',
+          select: 'firstName lastName email imageUrl',
+        },
+        {
+          path: 'address',
+          select:
+            'streetNo city state postalCode country type recipientFirstName recipientLastName recipientEmail',
+        },
+        {
+          path: 'products.product',
+          select: 'name price stock images availability',
+        },
+      ])
+      .lean()
+      .exec();
+  
     if (!order) throw new NotFoundException('Order not found');
-    return order;
+  
+    // --- Format response ---
+    return {
+      ...order,
+      products: (order.products as any[]).map((item: any) => {
+        const isPopulated =
+          item.product &&
+          typeof item.product === 'object' &&
+          '_id' in item.product;
+  
+        const productData = isPopulated ? item.product : null;
+  
+        return {
+          orderLineId: item._id,
+          quantity: item.quantity,
+          snapshot: {
+            name: item.name,
+            price: item.price,
+            image: item.image,
+          },
+          product: productData
+            ? {
+                id: productData._id,
+                name: productData.name,
+                price: productData.price,
+                stock: productData.stock,
+                images: productData.images,
+                availability: productData.availability,
+              }
+            : null,
+        };
+      }),
+    };
   }
+
 
   async updateStatus(
     id: string,
     updateOrderStatusDto: UpdateOrderStatusDto,
   ): Promise<Order> {
     // Prevent updating to refunded status
-    if (updateOrderStatusDto.status === OrderStatus.REFUNDED) {
-      throw new BadRequestException('Refund status is not supported');
-    }
+    // if (updateOrderStatusDto.status === OrderStatus.REFUNDED) {
+    //   throw new BadRequestException('Refund status is not supported');
+    // }
 
     const order = await this.orderModel
       .findByIdAndUpdate(

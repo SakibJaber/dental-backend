@@ -204,9 +204,9 @@ export class AuthService {
     return { message: 'Email verified' };
   }
 
-  /* =======================
-   * Login / Tokens / Logout
-   * ======================= */
+
+   // Login / Tokens / Logout
+
   async login(dto: LoginAuthDto) {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user || !(await bcrypt.compare(dto.password, user.password))) {
@@ -292,9 +292,7 @@ export class AuthService {
     return { message: 'Logged out successfully' };
   }
 
-  /* =======================
-   * Change Password (auth)
-   * ======================= */
+  // Change Password (auth)
   async changePassword(userId: string, dto: ChangePasswordDto) {
     const user = await this.usersService.findById(userId);
     if (!user) {

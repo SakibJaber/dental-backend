@@ -1,4 +1,3 @@
-// src/modules/order/dto/create-order.dto.ts
 import {
   IsMongoId,
   IsString,

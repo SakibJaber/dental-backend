@@ -154,26 +154,30 @@ export class ProductsController {
     };
   }
 
-  @Put(':id')
-  @UseInterceptors(FilesInterceptor('images', 10))
-  async update(
+   @Patch(':id')
+  @UseInterceptors(FilesInterceptor('files', 10)) // field name: files[]
+  async updateProduct(
     @Param('id') id: string,
-    @Body() updateProductDto: UpdateProductDto,
-    @UploadedFiles() files?: Express.Multer.File[],
+    @Body() dto: UpdateProductDto,
+    @UploadedFiles() files: Express.Multer.File[],
   ) {
-    const updated = await this.productsService.update(
-      id,
-      updateProductDto,
-      files,
-    );
-    return {
-      status: 'success',
-      statusCode: HttpStatus.OK,
-      message: 'Product updated successfully',
-      data: updated,
+    // If the client sends arrays via form-data, they might be JSON strings.
+    // Normalize here defensively:
+    const normalize = <T>(v: any): T | undefined => {
+      if (v === undefined || v === null || v === '') return undefined;
+      if (typeof v === 'string') {
+        try { return JSON.parse(v); } catch { /* fallthrough */ }
+      }
+      return v;
     };
-  }
 
+    dto.addImageUrls = normalize<string[]>(dto.addImageUrls);
+    dto.removeImageUrls = normalize<string[]>(dto.removeImageUrls);
+    dto.removeImageIndexes = normalize<number[]>(dto.removeImageIndexes);
+
+    return this.productsService.update(id, dto, files);
+  }
+  
   @Post(':id/images')
   @UseInterceptors(FilesInterceptor('images', 10))
   async addImages(

@@ -1,4 +1,3 @@
-// src/modules/order/order.controller.ts
 import {
   Controller,
   Post,
@@ -64,12 +63,12 @@ export class OrdersController {
 
     // Create order with cart items
     const order = await this.ordersService.create(
-      userId, 
-      createOrderDto, 
-      cart.items.filter(item => item.product !== null)
+      userId,
+      createOrderDto,
+      cart.items.filter((item) => item.product !== null),
     );
 
-    // Create Stripe checkout session
+    // Create Stripe checkout session 
     const frontendUrl = this.configService.get<string>('BASE_URL');
     const successUrl = `${frontendUrl}/checkout/success?orderId=${order._id}`;
     const cancelUrl = `${frontendUrl}/checkout/cancel?orderId=${order._id}`;
@@ -174,7 +173,7 @@ export class OrdersController {
       OrderStatus.DELIVERED,
       OrderStatus.CANCELLED,
     ];
-    
+
     if (!allowedStatuses.includes(updateOrderStatusDto.status)) {
       throw new BadRequestException('Invalid order status');
     }

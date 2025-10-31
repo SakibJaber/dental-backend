@@ -22,6 +22,14 @@ export class Product {
   productId: string;
 
   @Prop({
+    type: String,
+    trim: true,
+    maxlength: 500,
+    default: '',
+  })
+  productCode: string;
+
+  @Prop({
     trim: true,
     maxlength: 2000,
   })
@@ -59,6 +67,14 @@ export class Product {
     required: true,
   })
   procedure: Types.ObjectId;
+
+  @Prop({
+    type: String,
+    trim: true,
+    maxlength: 200,
+    default: '',
+  })
+  procedureName: string;
 
   @Prop({ type: [String], default: [] })
   images: string[];

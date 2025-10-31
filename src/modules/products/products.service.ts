@@ -88,6 +88,14 @@ export class ProductsService {
       this.validateObjectId(dto.brand);
       this.validateObjectId(dto.procedure);
 
+      const procedure = await this.productModel.db
+        .collection('procedures')
+        .findOne({ _id: new Types.ObjectId(dto.procedure) });
+
+      if (!procedure) {
+        throw new BadRequestException('Invalid procedure ID');
+      }
+
       let imageUrls: string[] = [];
 
       // If files are provided, upload them
@@ -104,9 +112,9 @@ export class ProductsService {
 
       const created = await this.productModel.create({
         ...dto,
+        procedureName: procedure.name,
         images: imageUrls,
         availability,
-        // productUrl will be included from dto automatically
       });
 
       const product = await this.productModel
@@ -149,12 +157,30 @@ export class ProductsService {
   }> {
     const filter: any = {};
 
-    // Text search
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-      ];
+    // 🔍 --- Smart search logic ---
+    if (search && search.trim() !== '') {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      // Try text search first (if index exists), fallback to regex
+      try {
+        const textIndexExists = await this.productModel.collection.indexExists(
+          'name_text_description_text',
+        );
+
+        if (textIndexExists) {
+          filter.$text = { $search: search };
+        } else {
+          filter.$or = [
+            { name: { $regex: escaped, $options: 'i' } },
+            { description: { $regex: escaped, $options: 'i' } },
+          ];
+        }
+      } catch {
+        filter.$or = [
+          { name: { $regex: escaped, $options: 'i' } },
+          { description: { $regex: escaped, $options: 'i' } },
+        ];
+      }
     }
 
     // Filter by multiple categories
@@ -382,7 +408,72 @@ export class ProductsService {
     return product;
   }
 
-  // --- Update product ---
+  // async update(
+  //   id: string,
+  //   dto: UpdateProductDto,
+  //   files?: Express.Multer.File[],
+  // ): Promise<Product> {
+  //   this.validateObjectId(id);
+
+  //   const existing = await this.productModel.findById(id);
+  //   if (!existing) {
+  //     throw new NotFoundException(`Product with ID ${id} not found`);
+  //   }
+
+  //   try {
+  //     //  Handle images only if provided
+  //     if (files && files.length > 0) {
+  //       // Delete old images (if necessary)
+  //       if (existing.images && existing.images.length > 0) {
+  //         await this.deleteImagesFromStorage(existing.images);
+  //       }
+  //       // Upload and replace with new images
+  //       existing.images = await this.processAndUploadImageFiles(files);
+  //     } else if (dto.images && dto.images.length > 0) {
+  //       // Optional: replace with new URLs if explicitly passed
+  //       const imagesToDelete = existing.images.filter(
+  //         (url) => !dto.images!.includes(url),
+  //       );
+  //       await this.deleteImagesFromStorage(imagesToDelete);
+  //       existing.images = dto.images;
+  //     }
+  //     // If neither files nor dto.images are provided → keep old images unchanged
+
+  //     //  Update other product fields (skip images & availability)
+  //     Object.keys(dto).forEach((key) => {
+  //       if (
+  //         dto[key] !== undefined &&
+  //         !['images', 'availability'].includes(key)
+  //       ) {
+  //         (existing as any)[key] = dto[key];
+  //       }
+  //     });
+
+  //     //  Update availability automatically based on stock
+  //     existing.availability = this.updateAvailabilityBasedOnStock(
+  //       existing.stock,
+  //     );
+
+  //     await existing.save();
+
+  //     const updated = await this.productModel
+  //       .findById(id)
+  //       .populate('category', 'name')
+  //       .populate('brand', 'name')
+  //       .populate('procedure', 'name')
+  //       .exec();
+
+  //     return updated!;
+  //   } catch (error) {
+  //     this.logger.error(`Failed to update product: ${error.message}`);
+  //     throw new BadRequestException(
+  //       error.message || 'Failed to update product',
+  //     );
+  //   }
+  // }
+
+  // --- Add more images to existing product ---
+
   async update(
     id: string,
     dto: UpdateProductDto,
@@ -390,61 +481,111 @@ export class ProductsService {
   ): Promise<Product> {
     this.validateObjectId(id);
 
-    const existing = await this.productModel.findById(id);
+    // Load current doc (lean for speed; we just need fields)
+    const existing = await this.productModel
+      .findById(id)
+      .lean<ProductDocument>()
+      .exec();
     if (!existing) {
       throw new NotFoundException(`Product with ID ${id} not found`);
     }
 
-    // If new files are provided, UPLOAD AND REPLACE existing images
-    if (files && files.length > 0) {
-      // Delete all old images from storage
-      await this.deleteImagesFromStorage(existing.images);
-
-      // Upload new images and replace the array
-      existing.images = await this.processAndUploadImageFiles(files);
-    }
-    // If images are provided in DTO (as URLs), use them to replace existing images
-    else if (dto.images) {
-      // Delete old images that aren't in the new dto.images array
-      const imagesToDelete = existing.images.filter(
-        (url) => !dto.images!.includes(url),
-      );
-      await this.deleteImagesFromStorage(imagesToDelete);
-
-      existing.images = dto.images;
-    }
-
-    // Update other fields (ignore availability for consistency)
-    Object.keys(dto).forEach((key) => {
-      if (
-        key !== 'images' &&
-        key !== 'availability' &&
-        dto[key] !== undefined
-      ) {
-        existing[key] = dto[key];
+    try {
+      // 1) Upload any newly provided files
+      let uploadedUrls: string[] = [];
+      if (files && files.length > 0) {
+        uploadedUrls = await this.processAndUploadImageFiles(files);
       }
-    });
 
-    // Always sync availability with stock after updates
-    existing.availability = this.updateAvailabilityBasedOnStock(existing.stock);
+      // 2) Work out removals (by URL and/or by index)
+      const removeByUrl = new Set<string>(dto.removeImageUrls ?? []);
 
-    await existing.save();
+      if (dto.removeImageIndexes?.length) {
+        for (const idx of dto.removeImageIndexes) {
+          if (idx < 0 || idx >= (existing.images?.length ?? 0)) {
+            throw new BadRequestException(`Invalid image index: ${idx}`);
+          }
+          // Map the index to a URL to remove
+          const urlAtIndex = existing.images[idx];
+          if (urlAtIndex) removeByUrl.add(urlAtIndex);
+        }
+      }
 
-    const updated = await this.productModel
-      .findById(id)
-      .populate('category', 'name')
-      .populate('brand', 'name')
-      .populate('procedure', 'name')
-      .exec();
+      // We only attempt to delete from storage if the URL exists in current doc
+      const actuallyPresentToRemove = [...removeByUrl].filter((u) =>
+        (existing.images ?? []).includes(u),
+      );
 
-    if (!updated) {
-      throw new NotFoundException('Failed to retrieve updated product');
+      // 3) Images to append (URLs from dto + uploaded)
+      const toAppend = [...(dto.addImageUrls ?? []), ...uploadedUrls];
+
+      // If the same URL is requested to be removed and added,
+      // we keep the "add" (drop from removal set)
+      const appendSet = new Set(toAppend);
+      const effectiveRemove = actuallyPresentToRemove.filter(
+        (u) => !appendSet.has(u),
+      );
+
+      // 4) Build $set/$pull/$addToSet ops
+      const set: Record<string, any> = {};
+      for (const [key, value] of Object.entries(dto)) {
+        if (
+          value !== undefined &&
+          ![
+            'addImageUrls',
+            'removeImageUrls',
+            'removeImageIndexes',
+            'images',
+            'availability',
+          ].includes(key)
+        ) {
+          set[key] = value;
+        }
+      }
+
+      // Recompute availability based on next stock value
+      const nextStock: number =
+        typeof set.stock === 'number' ? set.stock : (existing.stock ?? 0);
+      set.availability = this.updateAvailabilityBasedOnStock(nextStock);
+
+      const updateOps: any = {};
+      if (Object.keys(set).length) updateOps.$set = set;
+      if (effectiveRemove.length) {
+        updateOps.$pull = { images: { $in: effectiveRemove } };
+      }
+      if (toAppend.length) {
+        updateOps.$addToSet = { images: { $each: toAppend } };
+      }
+
+      // 5) Apply atomic update
+      const updated = await this.productModel
+        .findByIdAndUpdate(id, updateOps, { new: true })
+        .populate('category', 'name')
+        .populate('brand', 'name')
+        .populate('procedure', 'name')
+        .exec();
+
+      // 6) After DB success, delete removed objects from storage (best-effort)
+      if (effectiveRemove.length) {
+        this.deleteImagesFromStorage(effectiveRemove).catch((err) => {
+          this.logger.warn(
+            `Post-update image deletion failed: ${err?.message || err}`,
+          );
+        });
+      }
+
+      return updated!;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to update product: ${error.message}`,
+        error?.stack,
+      );
+      throw new BadRequestException(
+        error.message || 'Failed to update product',
+      );
     }
-
-    return updated;
   }
 
-  // --- Add more images to existing product ---
   async addImages(id: string, files: Express.Multer.File[]): Promise<Product> {
     this.validateObjectId(id);
 

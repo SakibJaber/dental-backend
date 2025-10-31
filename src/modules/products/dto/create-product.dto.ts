@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsString,
   IsNumber,
@@ -18,6 +19,10 @@ export class CreateProductDto {
   productId?: string;
 
   @IsString()
+  @IsOptional()
+  productCode?: string;
+
+  @IsString()
   @IsNotEmpty()
   name: string;
 
@@ -27,10 +32,12 @@ export class CreateProductDto {
 
   @IsNumber()
   @Min(0)
+  @Type(() => Number)
   price: number;
 
   @IsNumber()
   @Min(0)
+  @Type(() => Number)
   @IsOptional()
   stock?: number;
 
