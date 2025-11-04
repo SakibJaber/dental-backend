@@ -154,61 +154,30 @@ export class ProductsController {
     };
   }
 
-   @Patch(':id')
-  @UseInterceptors(FilesInterceptor('files', 10)) // field name: files[]
+  @Patch(':id')
+  @UseInterceptors(FilesInterceptor('images', 10))
   async updateProduct(
     @Param('id') id: string,
     @Body() dto: UpdateProductDto,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    // If the client sends arrays via form-data, they might be JSON strings.
-    // Normalize here defensively:
-    const normalize = <T>(v: any): T | undefined => {
-      if (v === undefined || v === null || v === '') return undefined;
-      if (typeof v === 'string') {
-        try { return JSON.parse(v); } catch { /* fallthrough */ }
+    // Parse images array if frontend sent JSON string of existing URLs
+    if (dto.images && typeof dto.images === 'string') {
+      try {
+        dto.images = JSON.parse(dto.images);
+      } catch {
+        throw new BadRequestException(
+          'Invalid images format — must be a JSON array of URLs.',
+        );
       }
-      return v;
-    };
-
-    dto.addImageUrls = normalize<string[]>(dto.addImageUrls);
-    dto.removeImageUrls = normalize<string[]>(dto.removeImageUrls);
-    dto.removeImageIndexes = normalize<number[]>(dto.removeImageIndexes);
-
-    return this.productsService.update(id, dto, files);
-  }
-  
-  @Post(':id/images')
-  @UseInterceptors(FilesInterceptor('images', 10))
-  async addImages(
-    @Param('id') id: string,
-    @UploadedFiles() files: Express.Multer.File[],
-  ) {
-    if (!files || files.length === 0) {
-      throw new BadRequestException('No images provided');
     }
-    const updated = await this.productsService.addImages(id, files);
+
+    const updated = await this.productsService.updateSimple(id, dto, files);
+
     return {
       status: 'success',
       statusCode: HttpStatus.OK,
-      message: 'Images added successfully',
-      data: updated,
-    };
-  }
-
-  @Delete(':id/images/:index')
-  async removeImage(
-    @Param('id') id: string,
-    @Param('index', ParseIntPipe) index: number,
-  ) {
-    if (index < 0) {
-      throw new BadRequestException('Invalid image index');
-    }
-    const updated = await this.productsService.removeImage(id, index);
-    return {
-      status: 'success',
-      statusCode: HttpStatus.OK,
-      message: 'Image removed successfully',
+      message: 'Product updated successfully',
       data: updated,
     };
   }

@@ -160,7 +160,6 @@ export class UsersController {
     };
   }
 
-
   @Patch(':id/activate')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)

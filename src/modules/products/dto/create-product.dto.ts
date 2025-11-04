@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import {
   IsString,
   IsNumber,
@@ -9,7 +9,7 @@ import {
   IsMongoId,
   Min,
   IsNotEmpty,
-  IsUrl,
+  IsString as IsStringType,
 } from 'class-validator';
 import { ProductAvailability } from 'src/common/enum/product-availability.enum';
 
@@ -53,8 +53,20 @@ export class CreateProductDto {
   @IsNotEmpty()
   procedure: string;
 
-  @IsArray()
   @IsOptional()
+  @IsArray()
+  @IsStringType({ each: true })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        return [value];
+      }
+    }
+    return value;
+  })
   images?: string[];
 
   @IsEnum(ProductAvailability)

@@ -16,6 +16,7 @@ import { CartModule } from './cart/cart.module';
 import { GlobalSearchModule } from './global-search/global-search.module';
 import { FavouritesModule } from './favourites/favourites.module';
 import { PagesModule } from './pages/pages.module';
+import { AdminDashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -35,7 +36,8 @@ import { PagesModule } from './pages/pages.module';
     CartModule,
     GlobalSearchModule,
     FavouritesModule,
-    PagesModule
+    PagesModule,
+    AdminDashboardModule
   ],
   controllers: [],
   providers: [],

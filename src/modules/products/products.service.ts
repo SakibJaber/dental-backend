@@ -297,7 +297,7 @@ export class ProductsService {
         this.productModel.countDocuments(filter).exec(),
       ]);
 
-      this.logger.debug(`Found ${data.length} products with total ${total}`);
+      // this.logger.debug(`Found ${data.length} products with total ${total}`);
 
       let enhancedData = data;
       if (userId) {
@@ -408,182 +408,64 @@ export class ProductsService {
     return product;
   }
 
-  // async update(
-  //   id: string,
-  //   dto: UpdateProductDto,
-  //   files?: Express.Multer.File[],
-  // ): Promise<Product> {
-  //   this.validateObjectId(id);
-
-  //   const existing = await this.productModel.findById(id);
-  //   if (!existing) {
-  //     throw new NotFoundException(`Product with ID ${id} not found`);
-  //   }
-
-  //   try {
-  //     //  Handle images only if provided
-  //     if (files && files.length > 0) {
-  //       // Delete old images (if necessary)
-  //       if (existing.images && existing.images.length > 0) {
-  //         await this.deleteImagesFromStorage(existing.images);
-  //       }
-  //       // Upload and replace with new images
-  //       existing.images = await this.processAndUploadImageFiles(files);
-  //     } else if (dto.images && dto.images.length > 0) {
-  //       // Optional: replace with new URLs if explicitly passed
-  //       const imagesToDelete = existing.images.filter(
-  //         (url) => !dto.images!.includes(url),
-  //       );
-  //       await this.deleteImagesFromStorage(imagesToDelete);
-  //       existing.images = dto.images;
-  //     }
-  //     // If neither files nor dto.images are provided → keep old images unchanged
-
-  //     //  Update other product fields (skip images & availability)
-  //     Object.keys(dto).forEach((key) => {
-  //       if (
-  //         dto[key] !== undefined &&
-  //         !['images', 'availability'].includes(key)
-  //       ) {
-  //         (existing as any)[key] = dto[key];
-  //       }
-  //     });
-
-  //     //  Update availability automatically based on stock
-  //     existing.availability = this.updateAvailabilityBasedOnStock(
-  //       existing.stock,
-  //     );
-
-  //     await existing.save();
-
-  //     const updated = await this.productModel
-  //       .findById(id)
-  //       .populate('category', 'name')
-  //       .populate('brand', 'name')
-  //       .populate('procedure', 'name')
-  //       .exec();
-
-  //     return updated!;
-  //   } catch (error) {
-  //     this.logger.error(`Failed to update product: ${error.message}`);
-  //     throw new BadRequestException(
-  //       error.message || 'Failed to update product',
-  //     );
-  //   }
-  // }
-
-  // --- Add more images to existing product ---
-
-  async update(
+  async updateSimple(
     id: string,
     dto: UpdateProductDto,
     files?: Express.Multer.File[],
   ): Promise<Product> {
     this.validateObjectId(id);
 
-    // Load current doc (lean for speed; we just need fields)
-    const existing = await this.productModel
-      .findById(id)
-      .lean<ProductDocument>()
-      .exec();
+    const existing = await this.productModel.findById(id);
     if (!existing) {
-      throw new NotFoundException(`Product with ID ${id} not found`);
+      throw new NotFoundException('Product not found');
     }
 
-    try {
-      // 1) Upload any newly provided files
-      let uploadedUrls: string[] = [];
-      if (files && files.length > 0) {
-        uploadedUrls = await this.processAndUploadImageFiles(files);
-      }
-
-      // 2) Work out removals (by URL and/or by index)
-      const removeByUrl = new Set<string>(dto.removeImageUrls ?? []);
-
-      if (dto.removeImageIndexes?.length) {
-        for (const idx of dto.removeImageIndexes) {
-          if (idx < 0 || idx >= (existing.images?.length ?? 0)) {
-            throw new BadRequestException(`Invalid image index: ${idx}`);
-          }
-          // Map the index to a URL to remove
-          const urlAtIndex = existing.images[idx];
-          if (urlAtIndex) removeByUrl.add(urlAtIndex);
-        }
-      }
-
-      // We only attempt to delete from storage if the URL exists in current doc
-      const actuallyPresentToRemove = [...removeByUrl].filter((u) =>
-        (existing.images ?? []).includes(u),
-      );
-
-      // 3) Images to append (URLs from dto + uploaded)
-      const toAppend = [...(dto.addImageUrls ?? []), ...uploadedUrls];
-
-      // If the same URL is requested to be removed and added,
-      // we keep the "add" (drop from removal set)
-      const appendSet = new Set(toAppend);
-      const effectiveRemove = actuallyPresentToRemove.filter(
-        (u) => !appendSet.has(u),
-      );
-
-      // 4) Build $set/$pull/$addToSet ops
-      const set: Record<string, any> = {};
-      for (const [key, value] of Object.entries(dto)) {
-        if (
-          value !== undefined &&
-          ![
-            'addImageUrls',
-            'removeImageUrls',
-            'removeImageIndexes',
-            'images',
-            'availability',
-          ].includes(key)
-        ) {
-          set[key] = value;
-        }
-      }
-
-      // Recompute availability based on next stock value
-      const nextStock: number =
-        typeof set.stock === 'number' ? set.stock : (existing.stock ?? 0);
-      set.availability = this.updateAvailabilityBasedOnStock(nextStock);
-
-      const updateOps: any = {};
-      if (Object.keys(set).length) updateOps.$set = set;
-      if (effectiveRemove.length) {
-        updateOps.$pull = { images: { $in: effectiveRemove } };
-      }
-      if (toAppend.length) {
-        updateOps.$addToSet = { images: { $each: toAppend } };
-      }
-
-      // 5) Apply atomic update
-      const updated = await this.productModel
-        .findByIdAndUpdate(id, updateOps, { new: true })
-        .populate('category', 'name')
-        .populate('brand', 'name')
-        .populate('procedure', 'name')
-        .exec();
-
-      // 6) After DB success, delete removed objects from storage (best-effort)
-      if (effectiveRemove.length) {
-        this.deleteImagesFromStorage(effectiveRemove).catch((err) => {
-          this.logger.warn(
-            `Post-update image deletion failed: ${err?.message || err}`,
-          );
-        });
-      }
-
-      return updated!;
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to update product: ${error.message}`,
-        error?.stack,
-      );
-      throw new BadRequestException(
-        error.message || 'Failed to update product',
-      );
+    // 1️⃣ Upload new images (if any)
+    let newImageUrls: string[] = [];
+    if (files && files.length > 0) {
+      newImageUrls = await this.processAndUploadImageFiles(files);
     }
+
+    // 2️⃣ Determine final image list (frontend sends the ones to keep)
+    const existingUrls = dto.images ?? [];
+    const updatedImages = [...existingUrls, ...newImageUrls];
+
+    // 3️⃣ Delete removed images from storage
+    const removedImages = existing.images.filter(
+      (url) => !updatedImages.includes(url),
+    );
+    if (removedImages.length > 0) {
+      await this.deleteImagesFromStorage(removedImages);
+    }
+
+    // 4️⃣ Always update images and mark modified
+    existing.images = updatedImages;
+    existing.markModified('images'); // <-- ✅ ensures removal-only updates are saved
+
+    // 5️⃣ Update other fields (if any)
+    Object.keys(dto).forEach((key) => {
+      if (dto[key] !== undefined && !['images', 'availability'].includes(key)) {
+        (existing as any)[key] = dto[key];
+      }
+    });
+
+    // 6️⃣ Update availability automatically based on stock
+    existing.availability = this.updateAvailabilityBasedOnStock(
+      dto.stock ?? existing.stock,
+    );
+
+    await existing.save();
+
+    const updated = await this.productModel
+      .findById(existing._id)
+      .populate('category', 'name')
+      .populate('brand', 'name')
+      .populate('procedure', 'name')
+      .exec();
+
+    if (!updated) throw new NotFoundException('Product not found after update');
+
+    return updated;
   }
 
   async addImages(id: string, files: Express.Multer.File[]): Promise<Product> {
@@ -820,7 +702,23 @@ export class ProductsService {
         { $unwind: { path: '$brand', preserveNullAndEmptyArrays: true } },
         { $unwind: { path: '$procedure', preserveNullAndEmptyArrays: true } },
         {
+          // $project: {
+          //   name: 1,
+          //   price: 1,
+          //   images: 1,
+          //   salesCount: 1,
+          //   views: 1,
+          //   isFeatured: 1,
+          //   availability: 1,
+          //   'category.name': 1,
+          //   'brand.name': 1,
+          //   'procedure.name': 1,
+          // },
+          
           $project: {
+            _id: 1,
+            productId: 1, // include productId
+            productCode: 1,
             name: 1,
             price: 1,
             images: 1,
@@ -831,6 +729,8 @@ export class ProductsService {
             'category.name': 1,
             'brand.name': 1,
             'procedure.name': 1,
+            createdAt: 1,
+            updatedAt: 1,
           },
         },
       ];

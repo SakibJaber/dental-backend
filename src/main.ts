@@ -8,7 +8,7 @@ import * as express from 'express';
 async function bootstrap() {
   // 👇 Important: disable Nest's built-in bodyParser completely first
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    bodyParser: false, // <-- this stops Nest from automatically parsing bodies
+    bodyParser: false, //  this stops Nest from automatically parsing bodies
   });
 
   const configService = app.get(ConfigService);
@@ -35,11 +35,11 @@ async function bootstrap() {
   //  CORS
   const allowlist = new Set([
     'http://localhost:5174',
-    'http://10.10.20.60:3001',
     'http://localhost:3000',
-    'http://10.10.20.60:3000',
     'http://10.10.20.48:3004',
+    'http://10.10.20.48:3005',
     'http://10.10.20.60:3005',
+    'https://dental-project-yctd.vercel.app',
   ]);
 
   app.enableCors({

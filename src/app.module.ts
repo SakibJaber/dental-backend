@@ -13,11 +13,23 @@ import { AllExceptionsFilter } from 'src/common/filters/all-exception.filter';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-        ServeStaticModule.forRoot({
+    ServeStaticModule.forRoot({
       rootPath: path.resolve(process.cwd(), 'public'),
-      serveRoot: '/', // so /uploads/* maps to public/uploads/*
+      serveRoot: '/', // Serve static files from root
       exclude: ['/api*'],
+      serveStaticOptions: {
+        index: false,
+        fallthrough: false,
+        etag: true,
+        lastModified: true,
+        maxAge: '1d'
+      }
     }),
+    // ServeStaticModule.forRoot({
+    //   rootPath: path.resolve(process.cwd(), 'public'),
+    //   serveRoot: '/static', // Static files will be served under /static/*
+    //   exclude: ['/api*'],
+    // }),
     MongooseDatabaseModule,
     FileUploadModule,
     DomainModule,
@@ -32,3 +44,4 @@ import { AllExceptionsFilter } from 'src/common/filters/all-exception.filter';
   ],
 })
 export class AppModule {}
+

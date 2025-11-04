@@ -383,13 +383,12 @@ export class OrderService {
 
     // Update order status based on payment status
     if (paymentStatus === PaymentStatus.SUCCEEDED) {
-      order.status = OrderStatus.CONFIRMED;
+      order.status = OrderStatus.PENDING;
     } else if (paymentStatus === PaymentStatus.FAILED) {
       order.status = OrderStatus.CANCELLED;
       // Restore product stock
       await this.updateProductStock(order.products, 'increment');
     }
-
     await order.save();
 
     // Notify user
