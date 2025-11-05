@@ -7,12 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as fssync from 'fs';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
-import {
-  S3Client,
-  PutObjectCommand,
-  DeleteObjectCommand,
-} from '@aws-sdk/client-s3';
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 @Injectable()
 export class FileUploadService {
@@ -20,7 +15,7 @@ export class FileUploadService {
   private readonly localUploadPath: string;
   private readonly s3?: S3Client;
   private readonly s3Bucket?: string;
-  private readonly publicBaseUrl?: string; 
+  private readonly publicBaseUrl?: string;
 
   constructor(private readonly config: ConfigService) {
     this.useS3 = this.config.get<string>('FILE_STORAGE', 'local') === 's3';
@@ -52,58 +47,55 @@ export class FileUploadService {
 
   /**
    * Upload a single file that arrived via Multer.
-   * For local: saves to disk (if memory storage used, we write buffer; if disk storage used, we return computed URL).
-   * For S3: uploads buffer to S3 and returns a public URL or key-based URL.
+   * When using multer-s3, the file is already uploaded to S3 and we just return the URL.
+   * For local: file is already saved to disk and we return the URL.
    */
   async handleUpload(file: Express.Multer.File): Promise<string> {
     if (!file) throw new BadRequestException('No file received');
 
     try {
       if (this.useS3) {
-        if (!file.buffer) {
-          // If you used diskStorage by mistake in S3 mode
-          throw new BadRequestException('File buffer missing in S3 mode');
+        // With multer-s3, the file is already uploaded to S3
+        // multer-s3 adds 'location' and 'key' properties to the file object
+        const s3File = file as any;
+
+        if (s3File.location) {
+          console.log('✅ Returning S3 location:', s3File.location);
+          return s3File.location; // S3 URL provided by multer-s3
         }
-        const ext = this.safeExt(file.originalname);
-        const key = `uploads/${this.uniqueName(ext)}`;
-        await this.s3!.send(
-          new PutObjectCommand({
-            Bucket: this.s3Bucket!,
-            Key: key,
-            Body: file.buffer,
-            ContentType: file.mimetype,
-          }),
+
+        if (s3File.key) {
+          const url = this.publicUrlForKey(s3File.key);
+          console.log('✅ Constructed S3 URL:', url);
+          return url;
+        }
+
+        // This shouldn't happen if multer-s3 is working
+        throw new Error(
+          `S3 upload failed. File has: ${Object.keys(file).join(', ')}. Expected 'location' or 'key' from multer-s3.`,
         );
-        return this.publicUrlForKey(key);
       }
 
-      // Local mode
-      // If Multer used diskStorage, `file.path` is present and file is already written.
+      // Local mode - file is already on disk via multer.diskStorage
       if (file.path) {
         return this.publicUrlForLocal(path.basename(file.path));
       }
 
-      // If Multer used memoryStorage for local (also supported)
-      if (file.buffer) {
-        const ext = this.safeExt(file.originalname);
-        const fileName = this.uniqueName(ext);
-        const filePath = path.join(this.localUploadPath, fileName);
-        await fs.writeFile(filePath, file.buffer);
-        return this.publicUrlForLocal(fileName);
+      if (file.filename) {
+        return this.publicUrlForLocal(file.filename);
       }
 
       throw new Error('No file data available');
     } catch (err: any) {
-      // Avoid leaking internals
-      throw new InternalServerErrorException('Failed to save file');
+      console.error('❌ File upload error:', err.message);
+      throw new InternalServerErrorException(
+        err.message || 'Failed to process file upload',
+      );
     }
   }
 
   /**
    * Delete a file by URL or key (S3) or by public path/local path (local).
-   * Accepts:
-   *  - S3: full https URL or a key like "uploads/xyz.jpg"
-   *  - Local: "/uploads/filename.ext" or an absolute file path inside LOCAL_UPLOAD_PATH
    */
   async deleteFile(fileIdentifier: string): Promise<void> {
     if (!fileIdentifier) return;
@@ -124,36 +116,18 @@ export class FileUploadService {
       const filePath = this.resolveLocalPath(fileIdentifier);
       await fs.unlink(filePath);
     } catch (err: any) {
-      // Ignore not-found deletes; otherwise surface a generic error
+      // Ignore not-found deletes
       if (err?.code === 'ENOENT' || err?.name === 'NoSuchKey') return;
       throw new InternalServerErrorException('File deletion failed');
     }
   }
 
-  // -------- helpers
-
-  private uniqueName(ext: string) {
-    const id = randomUUID();
-    return `${id}${ext}`;
-  }
-
-  private safeExt(original: string) {
-    // Keep lowercased ext and restrict to a sensible set; fallback to .bin
-    const raw = (path.extname(original) || '').toLowerCase();
-    if (!raw) return '.bin';
-    // Optional stricter filter
-    if (!raw.match(/^\.(jpg|jpeg|png|gif|webp|pdf|txt|csv|mp4|mp3|bin)$/)) {
-      return '.bin';
-    }
-    return raw;
-  }
+  // -------- Private helpers --------
 
   private publicUrlForLocal(fileName: string) {
-    // If you run a CDN or proxy, set FILE_PUBLIC_BASE_URL (e.g., https://static.example.com)
     if (this.publicBaseUrl) {
       return `${this.publicBaseUrl.replace(/\/+$/, '')}/uploads/${encodeURIComponent(fileName)}`;
     }
-    // Otherwise assume Nest serves /uploads from LOCAL_UPLOAD_PATH via ServeStatic
     return `/uploads/${encodeURIComponent(fileName)}`;
   }
 
@@ -161,41 +135,34 @@ export class FileUploadService {
     if (this.publicBaseUrl) {
       return `${this.publicBaseUrl.replace(/\/+$/, '')}/${encodeURIComponent(key)}`;
     }
-    // Default S3 URL; replace if you use a different S3 URL style or CloudFront
+    // Default S3 URL
     return `https://${this.s3Bucket}.s3.${this.config.get('AWS_REGION')}.amazonaws.com/${encodeURIComponent(key)}`;
   }
 
   private extractS3Key(input: string) {
     if (input.startsWith('http://') || input.startsWith('https://')) {
       const url = new URL(input);
-      // For path-style URLs: /bucket/key... ; for virtual-hosted: /key...
-      // Handle both by stripping leading "/"
       return decodeURIComponent(url.pathname.replace(/^\/+/, ''));
     }
     return input;
   }
 
   private resolveLocalPath(identifier: string) {
-    // Supports "/uploads/filename" or an absolute/relative path
     let fileName: string;
 
     if (identifier.startsWith('/uploads/')) {
-      fileName = path.basename(identifier); // prevent traversal
+      fileName = path.basename(identifier);
     } else {
-      // If the caller passed a full path, force it to be inside localUploadPath
-      if (path.isAbsolute(identifier)) {
-        fileName = path.basename(identifier);
-      } else {
-        fileName = path.basename(identifier);
-      }
+      fileName = path.basename(identifier);
     }
 
     const joined = path.join(this.localUploadPath, fileName);
-    // Ensure the path stays within localUploadPath (defense-in-depth)
     const normalized = path.normalize(joined);
+
     if (!normalized.startsWith(path.normalize(this.localUploadPath))) {
       throw new BadRequestException('Invalid file path');
     }
+
     return normalized;
   }
 }

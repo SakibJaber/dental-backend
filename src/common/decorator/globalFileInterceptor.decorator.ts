@@ -1,10 +1,11 @@
 import { applyDecorators, UseInterceptors } from '@nestjs/common';
-import { GlobalFileUploadInterceptor } from 'src/modules/file-upload/file-upload.interceptor';
-
-type Opts = Parameters<typeof GlobalFileUploadInterceptor>[0];
+import {
+  FileInterceptorOptions,
+  GlobalFileUploadInterceptor,
+} from 'src/modules/file-upload/file-upload.interceptor';
 
 export function UseGlobalFileInterceptor(
-  options: Opts = { fieldName: 'file' },
+  options: FileInterceptorOptions = { fieldName: 'file' },
 ) {
   return applyDecorators(UseInterceptors(GlobalFileUploadInterceptor(options)));
 }
