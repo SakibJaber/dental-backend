@@ -64,7 +64,7 @@ export class MailService {
   private async verifyTransporter() {
     try {
       await this.transporter.verify();
-      console.log('✓ Mail transporter verified and ready');
+      // console.log('✓ Mail transporter verified and ready');
     } catch (error) {
       console.error('✗ Mail transporter verification failed:', error);
     }

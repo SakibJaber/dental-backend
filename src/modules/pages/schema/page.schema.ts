@@ -18,6 +18,3 @@ export class Page extends Document {
 }
 
 export const PageSchema = SchemaFactory.createForClass(Page);
-
-// helpful compound index example if you ever expand
-PageSchema.index({ key: 1 }, { unique: true });

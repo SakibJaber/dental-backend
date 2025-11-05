@@ -11,16 +11,14 @@ export class FavouriteProduct {
   @Prop({
     type: Types.ObjectId,
     ref: 'User',
-    required: true,
-    index: true,
+    required: true
   })
   user: Types.ObjectId;
 
   @Prop({
     type: Types.ObjectId,
     ref: 'Product',
-    required: true,
-    index: true,
+    required: true
   })
   product: Types.ObjectId;
 
