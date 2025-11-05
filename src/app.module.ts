@@ -10,18 +10,26 @@ import { FileUploadModule } from 'src/modules/file-upload/file-upload.module';
 import { APP_FILTER } from '@nestjs/core';
 import { AllExceptionsFilter } from 'src/common/filters/all-exception.filter';
 
-@Module({
-  imports: [
-    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
+const importsArray: any[] = [
+  ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
+  MongooseDatabaseModule,
+  FileUploadModule,
+  DomainModule,
+];
+
+// Only serve static files if using local storage
+if (process.env.FILE_STORAGE === 'local') {
+  importsArray.push(
     ServeStaticModule.forRoot({
       rootPath: path.resolve(process.cwd(), 'public'),
-      serveRoot: '/', // so /uploads/* maps to public/uploads/*
+      serveRoot: '/',
       exclude: ['/api*'],
     }),
-    MongooseDatabaseModule,
-    FileUploadModule,
-    DomainModule,
-  ],
+  );
+}
+
+@Module({
+  imports: importsArray,
   controllers: [AppController],
   providers: [
     AppService,
