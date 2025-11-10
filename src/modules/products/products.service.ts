@@ -13,6 +13,7 @@ import { FileUploadService } from 'src/modules/file-upload/file-upload.service';
 import { ProductAvailability } from 'src/common/enum/product-availability.enum';
 import { Product, ProductDocument } from './schema/product.schema';
 import { FavouritesService } from '../favourites/favourites.service';
+import { NotificationService } from 'src/modules/notification/notification.service';
 
 @Injectable()
 export class ProductsService {
@@ -23,6 +24,7 @@ export class ProductsService {
     private readonly productModel: Model<ProductDocument>,
     private readonly fileUploadService: FileUploadService,
     private readonly favouritesService: FavouritesService,
+    private readonly notificationService: NotificationService,  
   ) {}
 
   // --- Process multiple product image files ---
@@ -127,6 +129,8 @@ export class ProductsService {
       if (!product) {
         throw new Error('Failed to create product');
       }
+
+ 
 
       return product;
     } catch (error) {
@@ -702,19 +706,6 @@ export class ProductsService {
         { $unwind: { path: '$brand', preserveNullAndEmptyArrays: true } },
         { $unwind: { path: '$procedure', preserveNullAndEmptyArrays: true } },
         {
-          // $project: {
-          //   name: 1,
-          //   price: 1,
-          //   images: 1,
-          //   salesCount: 1,
-          //   views: 1,
-          //   isFeatured: 1,
-          //   availability: 1,
-          //   'category.name': 1,
-          //   'brand.name': 1,
-          //   'procedure.name': 1,
-          // },
-          
           $project: {
             _id: 1,
             productId: 1, // include productId

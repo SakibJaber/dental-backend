@@ -50,7 +50,7 @@ export class CreateProductDto {
   brand: string;
 
   @IsMongoId()
-  @IsNotEmpty()
+  @IsOptional()
   procedure: string;
 
   @IsOptional()

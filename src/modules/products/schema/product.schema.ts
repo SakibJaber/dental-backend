@@ -64,7 +64,7 @@ export class Product {
   @Prop({
     type: Types.ObjectId,
     ref: 'Procedure',
-    required: true,
+    required: false,
   })
   procedure: Types.ObjectId;
 

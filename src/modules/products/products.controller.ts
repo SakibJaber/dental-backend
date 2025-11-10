@@ -27,13 +27,21 @@ import { Roles } from 'src/common/decorator/roles.decorator';
 import { Role } from 'src/common/enum/user_role.enum';
 import { JwtAuthGuard } from 'src/common/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guard/roles.guard';
+import { GlobalFileUploadInterceptor } from 'src/modules/file-upload/file-upload.interceptor';
 
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post()
-  @UseInterceptors(FilesInterceptor('images', 10))
+  @UseInterceptors(
+    GlobalFileUploadInterceptor({
+      fieldName: 'images',
+      maxCount: 10,
+      allowedMimes: /\.(jpg|jpeg|png|gif|webp)$/i,
+      maxFileSizeBytes: 10 * 1024 * 1024, // 10MB
+    }),
+  )
   async create(
     @Body() createProductDto: CreateProductDto,
     @UploadedFiles() files?: Express.Multer.File[],
@@ -155,7 +163,14 @@ export class ProductsController {
   }
 
   @Patch(':id')
-  @UseInterceptors(FilesInterceptor('images', 10))
+  @UseInterceptors(
+    GlobalFileUploadInterceptor({
+      fieldName: 'images',
+      maxCount: 10,
+      allowedMimes: /\.(jpg|jpeg|png|gif|webp)$/i,
+      maxFileSizeBytes: 10 * 1024 * 1024, // 10MB
+    }),
+  )
   async updateProduct(
     @Param('id') id: string,
     @Body() dto: UpdateProductDto,
