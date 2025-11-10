@@ -38,7 +38,7 @@ export class ProductsController {
     GlobalFileUploadInterceptor({
       fieldName: 'images',
       maxCount: 10,
-      allowedMimes: /\.(jpg|jpeg|png|gif|webp)$/i,
+      allowedMimes: /^(image\/(jpeg|png|gif|webp)|application\/pdf)$/i,
       maxFileSizeBytes: 10 * 1024 * 1024, // 10MB
     }),
   )
@@ -167,7 +167,7 @@ export class ProductsController {
     GlobalFileUploadInterceptor({
       fieldName: 'images',
       maxCount: 10,
-      allowedMimes: /\.(jpg|jpeg|png|gif|webp)$/i,
+      allowedMimes: /^(image\/(jpeg|png|gif|webp)|application\/pdf)$/i,
       maxFileSizeBytes: 10 * 1024 * 1024, // 10MB
     }),
   )
