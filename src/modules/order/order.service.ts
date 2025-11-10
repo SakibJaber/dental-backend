@@ -1,4 +1,3 @@
-
 import {
   BadRequestException,
   Injectable,
@@ -101,10 +100,28 @@ export class OrderService {
   private async validateProducts(products: any[]) {
     for (const item of products) {
       const product = await this.productModel.findById(item.product);
+
       if (!product || product.availability !== ProductAvailability.IN_STOCK) {
+        // Notify user: product unavailable during checkout
+        await this.notificationService.createNotification({
+          title: 'Product Unavailable',
+          body: `${item.name} is currently out of stock and cannot be ordered.`,
+          user: product?.user?.toString?.() ?? '', // User not available, fallback empty
+          metadata: { productId: item.product },
+        });
+
         throw new ConflictException(`Product ${item.name} is out of stock`);
       }
+
       if (product.stock < item.quantity) {
+        // Notify user: insufficient stock
+        await this.notificationService.createNotification({
+          title: 'Insufficient Stock',
+          body: `Only ${product.stock} units of ${item.name} are available.`,
+          user: product?.user?.toString?.() ?? '',
+          metadata: { productId: item.product },
+        });
+
         throw new ConflictException(
           `Insufficient stock for ${item.name}. Available: ${product.stock}`,
         );
@@ -128,7 +145,6 @@ export class OrderService {
         { new: true },
       );
 
-      // Update product availability based on new stock
       if (updatedProduct) {
         const availability =
           updatedProduct.stock > 0
@@ -138,6 +154,21 @@ export class OrderService {
         await this.productModel.findByIdAndUpdate(item.product, {
           availability,
         });
+
+        //  Notify admins when product goes out of stock
+        if (availability === ProductAvailability.OUT_OF_STOCK) {
+          const admins = await this.userModel.find({ role: 'admin' }).exec();
+          await Promise.all(
+            admins.map((admin) =>
+              this.notificationService.createNotification({
+                title: 'Product Out of Stock',
+                body: `${updatedProduct.name} is now out of stock.`,
+                user: admin._id.toString(),
+                metadata: { productId: updatedProduct._id },
+              }),
+            ),
+          );
+        }
       }
     }
   }
@@ -185,11 +216,11 @@ export class OrderService {
     if (userId) query.user = new Types.ObjectId(userId);
     if (search && search.trim() !== '') {
       const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  
+
       // If search looks like ObjectId or UUID, try matching _id directly
       const isObjectId = Types.ObjectId.isValid(search);
       const idMatch = isObjectId ? [{ _id: new Types.ObjectId(search) }] : [];
-  
+
       query.$or = [
         ...idMatch,
         { 'user.firstName': { $regex: escaped, $options: 'i' } },
@@ -198,9 +229,9 @@ export class OrderService {
         { 'products.name': { $regex: escaped, $options: 'i' } },
       ];
     }
-  
+
     const skip = (page - 1) * limit;
-  
+
     const [orders, total] = await Promise.all([
       this.orderModel
         .find(query)
@@ -226,7 +257,7 @@ export class OrderService {
         .exec(),
       this.orderModel.countDocuments(query),
     ]);
-  
+
     // --- Format response ---
     const formattedOrders = orders.map((order) => ({
       ...order,
@@ -235,9 +266,9 @@ export class OrderService {
           item.product &&
           typeof item.product === 'object' &&
           '_id' in item.product;
-  
+
         const productData = isPopulated ? item.product : null;
-  
+
         return {
           orderLineId: item._id, // subdocument ID
           quantity: item.quantity,
@@ -259,7 +290,7 @@ export class OrderService {
         };
       }),
     }));
-  
+
     return {
       data: formattedOrders,
       meta: {
@@ -270,7 +301,7 @@ export class OrderService {
       },
     };
   }
-  
+
   async findOne(id: string): Promise<any> {
     const order = await this.orderModel
       .findById(id)
@@ -291,9 +322,9 @@ export class OrderService {
       ])
       .lean()
       .exec();
-  
+
     if (!order) throw new NotFoundException('Order not found');
-  
+
     // --- Format response ---
     return {
       ...order,
@@ -302,9 +333,9 @@ export class OrderService {
           item.product &&
           typeof item.product === 'object' &&
           '_id' in item.product;
-  
+
         const productData = isPopulated ? item.product : null;
-  
+
         return {
           orderLineId: item._id,
           quantity: item.quantity,
@@ -328,16 +359,10 @@ export class OrderService {
     };
   }
 
-
   async updateStatus(
     id: string,
     updateOrderStatusDto: UpdateOrderStatusDto,
   ): Promise<Order> {
-    // Prevent updating to refunded status
-    // if (updateOrderStatusDto.status === OrderStatus.REFUNDED) {
-    //   throw new BadRequestException('Refund status is not supported');
-    // }
-
     const order = await this.orderModel
       .findByIdAndUpdate(
         id,
@@ -347,16 +372,17 @@ export class OrderService {
         },
         { new: true },
       )
-      .populate('user', 'name');
+      .populate('user', 'firstName lastName email imageUrl');
 
     if (!order) throw new NotFoundException('Order not found');
+
     const userIdStr =
       (order.user as any)?._id?.toString?.() ?? order.user.toString();
 
-    // Notify user of status update
+    // ✅ Basic status update notification
     await this.notificationService.createNotification({
       title: 'Order Status Updated',
-      body: `Your order #${order._id} is now "${updateOrderStatusDto.status}"`,
+      body: `Your order #${order._id} is now "${updateOrderStatusDto.status}".`,
       user: userIdStr,
       metadata: {
         orderId: order._id,
@@ -364,6 +390,39 @@ export class OrderService {
         trackingNumber: updateOrderStatusDto.trackingNumber,
       },
     });
+
+    // ✅ Notify user when delivered
+    if (updateOrderStatusDto.status === OrderStatus.DELIVERED) {
+      await this.notificationService.createNotification({
+        title: 'Order Delivered',
+        body: `Your order #${order._id} has been delivered successfully.`,
+        user: userIdStr,
+        metadata: { orderId: order._id },
+      });
+    }
+
+    //  Notify on cancellation (user)
+    if (updateOrderStatusDto.status === OrderStatus.CANCELLED) {
+      await this.notificationService.createNotification({
+        title: 'Order Cancelled',
+        body: `Your order #${order._id} has been cancelled.`,
+        user: userIdStr,
+        metadata: { orderId: order._id },
+      });
+
+      //  Notify all admins
+      const admins = await this.userModel.find({ role: 'admin' }).exec();
+      await Promise.all(
+        admins.map((admin) =>
+          this.notificationService.createNotification({
+            title: 'Order Cancelled',
+            body: `Order #${order._id} has been cancelled.`,
+            user: admin._id.toString(),
+            metadata: { orderId: order._id, cancelledBy: userIdStr },
+          }),
+        ),
+      );
+    }
 
     return order;
   }
@@ -381,23 +440,52 @@ export class OrderService {
       order.stripePaymentIntentId = stripePaymentIntentId;
     }
 
-    // Update order status based on payment status
+    //   Update order status based on payment result
     if (paymentStatus === PaymentStatus.SUCCEEDED) {
       order.status = OrderStatus.PENDING;
     } else if (paymentStatus === PaymentStatus.FAILED) {
       order.status = OrderStatus.CANCELLED;
-      // Restore product stock
+
+      //   Restore stock when payment fails
       await this.updateProductStock(order.products, 'increment');
     }
+
     await order.save();
 
-    // Notify user
-    await this.notificationService.createNotification({
-      title: 'Payment Status Update',
-      body: `Payment for order #${order._id} is ${paymentStatus}`,
-      user: order.user.toString(),
-      metadata: { orderId: order._id, paymentStatus },
-    });
+    const userId = order.user.toString();
+
+    //   Notify user: payment succeeded
+    if (paymentStatus === PaymentStatus.SUCCEEDED) {
+      await this.notificationService.createNotification({
+        title: 'Payment Successful',
+        body: `Payment for order #${order._id} has been completed.`,
+        user: userId,
+        metadata: { orderId: order._id },
+      });
+    }
+
+    //   Notify user: payment failed
+    if (paymentStatus === PaymentStatus.FAILED) {
+      await this.notificationService.createNotification({
+        title: 'Payment Failed',
+        body: `Payment for order #${order._id} failed. Your items have been returned to your cart.`,
+        user: userId,
+        metadata: { orderId: order._id },
+      });
+
+      //   Notify admins (optional)
+      const admins = await this.userModel.find({ role: 'admin' }).exec();
+      await Promise.all(
+        admins.map((admin) =>
+          this.notificationService.createNotification({
+            title: 'Payment Failed',
+            body: `Payment for order #${order._id} failed.`,
+            user: admin._id.toString(),
+            metadata: { orderId: order._id, userId },
+          }),
+        ),
+      );
+    }
 
     return order;
   }

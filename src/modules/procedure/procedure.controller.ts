@@ -9,7 +9,9 @@ import {
   UploadedFile,
   HttpStatus,
   UseGuards,
+  Query,
 } from '@nestjs/common';
+import { PaginationParamsDto } from 'src/modules/procedure/dto/pagination-params.dto';
 import { ProceduresService } from './procedure.service';
 import { CreateProcedureDto } from './dto/create-procedure.dto';
 import { UpdateProcedureDto } from './dto/update-procedure.dto';
@@ -40,12 +42,13 @@ export class ProceduresController {
   }
 
   @Get()
-  async findAll() {
-    const procedures = await this.proceduresService.findAll();
+  async findAll(@Query() paginationParams: PaginationParamsDto) {
+    const { data, pagination } = await this.proceduresService.findAll(paginationParams);
     return {
       statusCode: HttpStatus.OK,
       message: 'Procedures fetched successfully',
-      data: procedures,
+      data,
+      pagination,
     };
   }
 

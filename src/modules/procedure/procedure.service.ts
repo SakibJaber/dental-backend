@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   BadRequestException,
 } from '@nestjs/common';
+import { PaginationParamsDto } from 'src/modules/procedure/dto/pagination-params.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Procedure } from './procedure.schema';
@@ -46,17 +47,55 @@ export class ProceduresService {
     }
   }
 
-  async findAll(): Promise<Procedure[]> {
-    return this.procedureModel.find().lean();
+  async findAll(paginationParams: PaginationParamsDto) {
+    const { page = 1, limit = 10, sort = '-createdAt' } = paginationParams;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.procedureModel
+        .find()
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.procedureModel.countDocuments().exec(),
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+    const hasNextPage = page < totalPages;
+    const hasPreviousPage = page > 1;
+
+    return {
+      data: items,
+      pagination: {
+        totalItems: total,
+        itemCount: items.length,
+        itemsPerPage: limit,
+        totalPages,
+        currentPage: page,
+        hasNextPage,
+        hasPreviousPage,
+      },
+    };
   }
 
-  async findOne(id: string): Promise<any> {
-    const procedure = await this.procedureModel.findById(id).lean();
+  async findOne(id: string) {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid procedure ID');
+    }
+
+    const procedure = await this.procedureModel.findById(id).lean().exec();
+
     if (!procedure) {
       throw new NotFoundException(`Procedure with ID ${id} not found`);
     }
 
-    const products = await this.productModel.find({ procedure: id }).lean();
+    // Fetch related products
+    const products = await this.productModel
+      .find({ procedure: id })
+      .lean()
+      .exec();
 
     return {
       ...procedure,

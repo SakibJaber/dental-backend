@@ -95,14 +95,20 @@ export class Product {
   @Prop({ default: false })
   isFeatured: boolean;
 
-  // Add the new productUrl field
   @Prop({
     type: String,
     trim: true,
-    maxlength: 500,
+    maxlength: 200,
     default: '',
   })
   productUrl: string;
+
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'User',
+    required: false,
+  })
+  user?: Types.ObjectId;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
