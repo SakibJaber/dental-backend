@@ -27,7 +27,7 @@ export class StripeService {
     try {
       const lineItems = params.products.map((item) => ({
         price_data: {
-          currency: 'usd', // Make configurable if needed
+          currency: 'gbp', // Currency set to GBP
           product_data: { name: item.name },
           unit_amount: Math.round(item.price * 100),
         },
