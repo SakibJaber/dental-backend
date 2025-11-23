@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
@@ -11,6 +12,7 @@ import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 @Injectable()
 export class FileUploadService {
+  private readonly logger = new Logger(FileUploadService.name);
   private readonly useS3: boolean;
   private readonly localUploadPath: string;
   private readonly s3?: S3Client;
@@ -60,13 +62,13 @@ export class FileUploadService {
         const s3File = file as any;
 
         if (s3File.location) {
-          console.log('✅ Returning S3 location:', s3File.location);
+          this.logger.log('✅ Returning S3 location:', s3File.location);
           return s3File.location; // S3 URL provided by multer-s3
         }
 
         if (s3File.key) {
           const url = this.publicUrlForKey(s3File.key);
-          console.log('✅ Constructed S3 URL:', url);
+          this.logger.log('✅ Constructed S3 URL:', url);
           return url;
         }
 
@@ -87,7 +89,7 @@ export class FileUploadService {
 
       throw new Error('No file data available');
     } catch (err: any) {
-      console.error('❌ File upload error:', err.message);
+      this.logger.error('❌ File upload error:', err.message);
       throw new InternalServerErrorException(
         err.message || 'Failed to process file upload',
       );
