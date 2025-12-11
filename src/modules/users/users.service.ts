@@ -4,9 +4,10 @@ import {
   BadRequestException,
   ForbiddenException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, ClientSession } from 'mongoose';
 import { UserStatus } from 'src/common/enum/user.status.enum';
 import { Role } from 'src/common/enum/user_role.enum';
 import { Address, AddressDocument } from 'src/modules/address/address.schema';
@@ -18,6 +19,7 @@ import { UpdateUserDto } from 'src/modules/users/dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
@@ -137,7 +139,10 @@ export class UsersService {
   }
 
   // Create new user
-  async createUser(data: Partial<User>): Promise<UserDocument> {
+  async createUser(
+    data: Partial<User>,
+    session?: ClientSession,
+  ): Promise<UserDocument> {
     if (!data.email) {
       throw new BadRequestException('Email is required');
     }
@@ -148,7 +153,7 @@ export class UsersService {
     }
 
     const user = new this.userModel(data);
-    const savedUser = await user.save();
+    const savedUser = await user.save({ session });
 
     // Notify admins about new registration
     try {
@@ -165,7 +170,7 @@ export class UsersService {
       );
     } catch (error) {
       // Log error but don't fail user creation
-      console.error('Failed to send admin notifications:', error);
+      this.logger.error('Failed to send admin notifications:', error);
     }
 
     return savedUser;
@@ -308,7 +313,7 @@ export class UsersService {
         metadata: { previousStatus, newStatus, action },
       });
     } catch (error) {
-      console.error('Failed to send user notification:', error);
+      this.logger.error('Failed to send user notification:', error);
     }
 
     // Notify admins about status change
@@ -331,7 +336,7 @@ export class UsersService {
         ),
       );
     } catch (error) {
-      console.error('Failed to send admin notifications:', error);
+      this.logger.error('Failed to send admin notifications:', error);
     }
 
     // Sanitize user for response
@@ -384,7 +389,7 @@ export class UsersService {
         metadata: { previousStatus, newStatus: status },
       });
     } catch (error) {
-      console.error('Failed to send user notification:', error);
+      this.logger.error('Failed to send user notification:', error);
     }
 
     // Notify admins about status change
@@ -406,7 +411,7 @@ export class UsersService {
         ),
       );
     } catch (error) {
-      console.error('Failed to send admin notifications:', error);
+      this.logger.error('Failed to send admin notifications:', error);
     }
 
     // Sanitize user for response
@@ -475,7 +480,7 @@ export class UsersService {
         ),
       );
     } catch (error) {
-      console.error('Failed to send deletion notifications:', error);
+      this.logger.error('Failed to send deletion notifications:', error);
     }
 
     return { message: 'User deleted successfully' };

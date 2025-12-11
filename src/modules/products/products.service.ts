@@ -9,6 +9,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { GetProductsDto } from './dto/get-products.dto';
 import { FileUploadService } from 'src/modules/file-upload/file-upload.service';
 import { ProductAvailability } from 'src/common/enum/product-availability.enum';
 import { Product, ProductDocument } from './schema/product.schema';
@@ -141,16 +142,7 @@ export class ProductsService {
   }
 
   async findAll(
-    page = 1,
-    limit = 10,
-    search?: string,
-    category?: string | string[],
-    brand?: string | string[],
-    procedure?: string | string[],
-    availability?: ProductAvailability,
-    isFeatured?: boolean,
-    minPrice?: number,
-    maxPrice?: number,
+    query: GetProductsDto,
     userId?: string,
   ): Promise<{
     data: Product[];
@@ -159,6 +151,18 @@ export class ProductsService {
     limit: number;
     totalPages: number;
   }> {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      category,
+      brand,
+      procedure,
+      availability,
+      isFeatured,
+      minPrice,
+      maxPrice,
+    } = query;
     const filter: any = {};
 
     // 🔍 --- Smart search logic ---
@@ -318,7 +322,7 @@ export class ProductsService {
             isFavourite: favouriteStatusMap[product._id.toString()] || false,
           }));
         } catch (error) {
-          console.warn(`Failed to get bulk favourite status: ${error.message}`);
+          this.logger.warn(`Failed to get bulk favourite status: ${error.message}`);
           enhancedData = data.map((product) => ({
             ...product,
             isFavourite: false,
@@ -405,7 +409,7 @@ export class ProductsService {
         // Use type assertion to add the computed field
         (product as any).isFavourite = favouriteStatus.isFavourite;
       } catch (error) {
-        console.warn(`Failed to check favourite status: ${error.message}`);
+        this.logger.warn(`Failed to check favourite status: ${error.message}`);
       }
     }
 

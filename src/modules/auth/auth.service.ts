@@ -5,7 +5,10 @@ import {
   BadRequestException,
   HttpStatus,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -26,6 +29,7 @@ import { Role } from 'src/common/enum/user_role.enum';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly otpExpiryMs: number;
 
   constructor(
@@ -35,6 +39,7 @@ export class AuthService {
     private readonly mailService: MailService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    @InjectConnection() private readonly connection: Connection,
   ) {
     this.otpExpiryMs =
       (+this.config.get<number>('OTP_EXPIRATION_MINUTES')! || 15) * 60 * 1000;
@@ -74,64 +79,80 @@ export class AuthService {
    * Signup & Email Verification
    * ======================= */
   async signup(dto: SignupAuthDto, file?: Express.Multer.File) {
-    const existing = await this.usersService.findByEmail(dto.email);
-    if (existing) {
-      throw new ForbiddenException({
-        statusCode: HttpStatus.FORBIDDEN,
-        message: 'Email already exists',
-      });
-    }
+    const session = await this.connection.startSession();
+    session.startTransaction();
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
-
-    let imageUrl: string | undefined;
-    if (file) {
-      // implement FileUploadService.handleUpload to return a public URL
-      imageUrl = await this.fileUploadService.handleUpload(file);
-    }
-
-    // Create user as PENDING (admin approval) and not verified (email)
-    const user: UserDocument = await this.usersService.createUser({
-      ...dto,
-      password: passwordHash,
-      imageUrl,
-      status: UserStatus.APPROVED,
-      isVerified: false,
-    });
-
-    // Generate email verification OTP
-    const code = this.generateCode();
-    user.emailVerificationCodeHash = await bcrypt.hash(code, 10);
-    user.emailVerificationExpires = new Date(Date.now() + this.otpExpiryMs);
-    await user.save();
-
-    // Send verification email (don’t fail signup if email send fails)
     try {
-      await this.mailService.sendEmailVerificationOtp(user.email, code);
-    } catch (err) {
-      throw new InternalServerErrorException(
-        'Failed to send verification email',
-      );
-    }
+      const existing = await this.usersService.findByEmail(dto.email);
+      if (existing) {
+        throw new ForbiddenException({
+          statusCode: HttpStatus.FORBIDDEN,
+          message: 'Email already exists',
+        });
+      }
 
-    // Notify admins about new signup
-    try {
-      const admins = await this.usersService.findAllByRole(Role.ADMIN);
-      await Promise.all(
-        admins.map((admin) =>
-          this.notificationService.createNotification({
-            title: 'New signup',
-            body: `${user.email} has signed up and needs approval.`,
-            user: admin.id,
-            metadata: { signup: true, newUserId: user.id },
-          }),
-        ),
-      );
-    } catch {
-      // swallow admin notification errors
-    }
+      const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    return { user: this.sanitize(user) };
+      let imageUrl: string | undefined;
+      if (file) {
+        // implement FileUploadService.handleUpload to return a public URL
+        imageUrl = await this.fileUploadService.handleUpload(file);
+      }
+
+      // Create user as PENDING (admin approval) and not verified (email)
+      const user: UserDocument = await this.usersService.createUser(
+        {
+          ...dto,
+          password: passwordHash,
+          imageUrl,
+          status: UserStatus.APPROVED,
+          isVerified: false,
+        },
+        session,
+      );
+
+      // Generate email verification OTP
+      const code = this.generateCode();
+      user.emailVerificationCodeHash = await bcrypt.hash(code, 10);
+      user.emailVerificationExpires = new Date(Date.now() + this.otpExpiryMs);
+      await user.save({ session });
+
+      // Send verification email (don’t fail signup if email send fails)
+      try {
+        await this.mailService.sendEmailVerificationOtp(user.email, code);
+      } catch (err) {
+        // If email fails, we might want to abort transaction?
+        // Current requirement says "don't fail signup", so we keep it.
+        // But if we wanted strict consistency, we would throw here.
+        this.logger.error('Failed to send verification email', err);
+      }
+
+      await session.commitTransaction();
+
+      // Notify admins about new signup (outside transaction as it's not critical for data integrity)
+      try {
+        const admins = await this.usersService.findAllByRole(Role.ADMIN);
+        await Promise.all(
+          admins.map((admin) =>
+            this.notificationService.createNotification({
+              title: 'New signup',
+              body: `${user.email} has signed up and needs approval.`,
+              user: admin.id,
+              metadata: { signup: true, newUserId: user.id },
+            }),
+          ),
+        );
+      } catch {
+        // swallow admin notification errors
+      }
+
+      return { user: this.sanitize(user) };
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
   }
 
   async sendEmailVerificationOtp(email: string) {

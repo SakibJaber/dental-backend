@@ -22,6 +22,7 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { GetProductsDto } from './dto/get-products.dto';
 import { ProductAvailability } from 'src/common/enum/product-availability.enum';
 import { Roles } from 'src/common/decorator/roles.decorator';
 import { Role } from 'src/common/enum/user_role.enum';
@@ -57,41 +58,20 @@ export class ProductsController {
 
   @Get()
   async findAll(
-    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number = 1,
-    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number = 10,
-    @Query('search') search?: string,
-    @Query('category') category?: string | string[],
-    @Query('brand') brand?: string | string[],
-    @Query('procedure') procedure?: string | string[],
-    @Query('availability') availability?: ProductAvailability,
-    @Query('isFeatured') isFeatured?: boolean,
-    @Query('minPrice') minPrice?: number,
-    @Query('maxPrice') maxPrice?: number,
+    @Query() query: GetProductsDto,
     @Request() req?: any,
   ) {
     // Validate price range
     if (
-      minPrice !== undefined &&
-      maxPrice !== undefined &&
-      minPrice > maxPrice
+      query.minPrice !== undefined &&
+      query.maxPrice !== undefined &&
+      query.minPrice > query.maxPrice
     ) {
       throw new BadRequestException('minPrice cannot be greater than maxPrice');
     }
 
     const userId = req?.user?.id;
-    const result = await this.productsService.findAll(
-      page,
-      limit,
-      search,
-      category,
-      brand,
-      procedure,
-      availability,
-      isFeatured,
-      minPrice,
-      maxPrice,
-      userId,
-    );
+    const result = await this.productsService.findAll(query, userId);
 
     return {
       status: 'success',

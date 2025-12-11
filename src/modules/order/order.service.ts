@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -22,6 +23,7 @@ import { PopulatedOrderProduct } from 'src/modules/order/types/populatedOrderPro
 
 @Injectable()
 export class OrderService {
+  private readonly logger = new Logger(OrderService.name);
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<Order>,
     @InjectModel(Address.name) private readonly addressModel: Model<Address>,
@@ -177,7 +179,7 @@ export class OrderService {
     try {
       await this.cartModel.deleteOne({ user: new Types.ObjectId(userId) });
     } catch (error) {
-      console.error(`Failed to clear cart for user ${userId}:`, error.message);
+      this.logger.error(`Failed to clear cart for user ${userId}:`, error.message);
     }
   }
 

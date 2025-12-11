@@ -1,9 +1,10 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class MailService {
+  private readonly logger = new Logger(MailService.name);
   private transporter: nodemailer.Transporter;
   private emailTemplate: string;
 
@@ -66,7 +67,7 @@ export class MailService {
       await this.transporter.verify();
       // console.log('✓ Mail transporter verified and ready');
     } catch (error) {
-      console.error('✗ Mail transporter verification failed:', error);
+      this.logger.error('✗ Mail transporter verification failed:', error);
     }
   }
 
@@ -95,12 +96,12 @@ export class MailService {
       const result = await this.transporter.sendMail(mailOptions);
 
       // Log success for monitoring
-      console.log(`✓ Email sent to ${to}: ${result.messageId}`);
+      this.logger.log(`✓ Email sent to ${to}: ${result.messageId}`);
 
       return result;
     } catch (error) {
       // Enhanced error logging
-      console.error(`✗ Failed to send email to ${to}:`, {
+      this.logger.error(`✗ Failed to send email to ${to}:`, {
         error: error.message,
         code: error.code,
         responseCode: error.responseCode,
