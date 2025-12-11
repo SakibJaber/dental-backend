@@ -68,7 +68,7 @@ export class CategoryService {
         .find(query)
         .skip(skip)
         .limit(limit)
-        .sort({ name: 1 })
+        .sort({ createdAt: 1 })
         .exec(),
       this.categoryModel.countDocuments(query).exec(), // Get total count based on filters
     ]);
