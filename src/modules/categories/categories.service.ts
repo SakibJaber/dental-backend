@@ -50,7 +50,7 @@ export class CategoryService {
   async findAll(
     page = 1,
     limit = 10,
-    search?: string, // Added search for categories
+    search?: string, // search for categories
   ): Promise<{
     data: Category[];
     total: number;
@@ -58,7 +58,7 @@ export class CategoryService {
     limit: number;
     totalPages: number;
   }> {
-    const query: any = {}; // Start with an empty query
+    const query: any = {}; 
     if (search) {
       query.name = { $regex: search, $options: 'i' };
     }

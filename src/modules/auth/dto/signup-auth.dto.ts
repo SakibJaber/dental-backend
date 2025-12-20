@@ -23,7 +23,7 @@ export class SignupAuthDto {
   @IsString()
   lastName: string;
 
-  @IsString()
-  @IsNotEmpty()
-  gdcNo: string;
+  // @IsString({ message: '' })
+  @IsNotEmpty({ message: 'GDC number is required' })
+  gdcNumber: string;
 }

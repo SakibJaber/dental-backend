@@ -39,6 +39,7 @@ async function bootstrap() {
     'http://10.10.20.48:3004',
     'http://10.10.20.48:3005',
     'http://10.10.20.60:3005',
+    'http://10.10.20.48:3000',
     'https://dental-project-yctd.vercel.app',
   ]);
 
