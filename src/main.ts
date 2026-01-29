@@ -33,25 +33,38 @@ async function bootstrap() {
   );
 
   //  CORS
-  const allowlist = new Set([
-    'http://localhost:5174',
-    'http://localhost:3000',
-    'http://10.10.20.48:3004',
-    'http://10.10.20.48:3005',
-    'http://10.10.20.60:3005',
-    'http://10.10.20.48:3000',
-    'https://dental-project-yctd.vercel.app',
-  ]);
+//  CORS (production-safe with Cloudflare)
+const allowedDomainRegex = /^https?:\/\/(www\.)?rnadental\.co\.uk$/;
 
-  app.enableCors({
-    origin: (origin, cb) => {
-      if (!origin || allowlist.has(origin)) return cb(null, true);
-      return cb(new Error(`CORS blocked: ${origin}`), false);
-    },
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    credentials: true,
-    allowedHeaders: 'Content-Type, Accept, Authorization',
-  });
+app.enableCors({
+  origin: (origin, cb) => {
+    // Allow server-to-server, Cloudflare worker, Postman, SSR requests
+    if (!origin) return cb(null, true);
+
+    // Allow your production domains
+    if (allowedDomainRegex.test(origin)) return cb(null, true);
+
+    // Allow development domains
+    const devAllowlist = new Set([
+      'http://localhost:5174',
+      'http://localhost:3000',
+      'http://10.10.20.48:3004',
+      'http://10.10.20.48:3005',
+      'http://10.10.20.60:3005',
+      'http://10.10.20.48:3000',
+      'https://dental-project-yctd.vercel.app',
+    ]);
+
+    if (devAllowlist.has(origin)) return cb(null, true);
+
+    console.error(`❌ CORS blocked: ${origin}`);
+    return cb(new Error(`CORS blocked: ${origin}`), false);
+  },
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+  credentials: true,
+  allowedHeaders: 'Content-Type, Accept, Authorization',
+
+});
 
   await app.listen(port);
   Logger.log(`🚀 Server running at http://localhost:${port}`, 'Bootstrap');
