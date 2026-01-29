@@ -2,6 +2,7 @@ import {
   IsEmail,
   IsNotEmpty,
   IsNumber,
+  IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
@@ -24,6 +25,7 @@ export class SignupAuthDto {
   lastName: string;
 
   // @IsString({ message: '' })
-  @IsNotEmpty({ message: 'GDC number is required' })
+  // @IsNotEmpty({ message: 'GDC number is required' })
+  @IsOptional()
   gdcNumber: string;
 }
