@@ -34,7 +34,7 @@ async function bootstrap() {
 
   //  CORS
 //  CORS (production-safe with Cloudflare)
-const allowedDomainRegex = /^https?:\/\/(www\.)?rnadental\.co\.uk$/;
+const allowedDomainRegex = /^https?:\/\/([a-zA-Z0-9-]+\.)?rnadental\.co\.uk$/;
 
 app.enableCors({
   origin: (origin, cb) => {
