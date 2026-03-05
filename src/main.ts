@@ -34,26 +34,23 @@ async function bootstrap() {
 
   //  CORS
   //  CORS (production-safe with Cloudflare)
-  const allowedDomainRegex = /^https?:\/\/([a-zA-Z0-9-]+\.)?rnadental\.co\.uk$/;
+  const allowedDomainRegex =
+    /^https?:\/\/([a-zA-Z0-9-]+\.)?(rnadental|rnasupplies)\.co\.uk$/;
 
   app.enableCors({
     origin: (origin, cb) => {
       // Allow server-to-server, Cloudflare worker, Postman, SSR requests
       if (!origin) return cb(null, true);
 
-      // Allow your production domains
+      // Allow your production domains (including subdomains)
       if (allowedDomainRegex.test(origin)) return cb(null, true);
 
-      // Allow development domains
-      const devAllowlist = new Set([
-        'https://rnasupplies.co.uk',
-        'https://www.rnasupplies.co.uk',
-        'https://rnadental.co.uk',
-        'https://www.rnadental.co.uk',
+      // Other authorized domains
+      const authorizedDomains = new Set([
         'https://dental-project-yctd.vercel.app',
       ]);
 
-      if (devAllowlist.has(origin)) return cb(null, true);
+      if (authorizedDomains.has(origin)) return cb(null, true);
 
       console.error(`❌ CORS blocked: ${origin}`);
       return cb(new Error(`CORS blocked: ${origin}`), false);
